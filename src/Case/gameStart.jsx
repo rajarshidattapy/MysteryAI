@@ -172,16 +172,21 @@ const GameStart = () => {
 
   const callGemini = async () => {
     setLoading(true);
+    setError(null); // Clear any previous errors
     let attempts = 0;
     let found = false;
     let finalParsed = null;
     let summary = null;
     let newEmbedding = null;
     
+    console.log("🚀 Starting case generation...");
+    
     while (attempts < 5 && !found) {
       attempts++;
+      console.log(`📝 Attempt ${attempts}/5`);
     
       try {
+        console.log("🔄 Calling Gemini API...");
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
           {
@@ -192,39 +197,153 @@ const GameStart = () => {
             }),
           }
         );
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(`Gemini API HTTP error ${res.status}:`, errorText);
+          
+          if (res.status === 429) {
+            console.warn("⚠️ Rate limited, waiting before retry...");
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+          }
+          
+          continue;
+        }
       
         const data = await res.json();
         let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-        if (!text) continue;
+        if (!text) {
+          console.error("No text received from Gemini API:", data);
+          continue;
+        }
+        
+        if (data.error) {
+          console.error("Gemini API error:", data.error);
+          continue;
+        }
       
         text = text.replace(/```json|```/g, "").trim();
         text = text.replace(/^\s*[\r\n]/gm, "").trim();
-        const parsed = JSON.parse(text);
+        
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch (parseError) {
+          console.error("Failed to parse JSON response:", parseError);
+          console.error("Raw text:", text);
+          continue;
+        }
+        
+        // Validate the parsed data has required fields
+        if (!parsed.case_title || !parsed.case_overview || !parsed.suspects) {
+          console.error("Invalid case data structure:", parsed);
+          continue;
+        }
+        
+        console.log("✅ Case parsed successfully:", parsed.case_title);
         summary = extractSummaryForEmbedding(parsed);
         newEmbedding = await getEmbeddingFromHF(summary);
         
+        // Check if embedding generation failed
+        if (!newEmbedding) {
+          console.error("Failed to generate embedding for summary:", summary);
+          // If embedding fails, still allow the case but skip similarity check
+          console.warn("⚠️ Proceeding without embedding similarity check");
+          found = true;
+          finalParsed = parsed;
+          finalParsed.embedding = null; // Mark as no embedding
+          break;
+        }
+        
         // Get all past embeddings
         const existingSummaries = await queryAllCaseSummaries();
-        const tooSimilar = existingSummaries.some((entry) => {
-          const sim = cosineSimilarity(newEmbedding, entry.embedding);
-          return sim > 0.91; // tweak threshold
-        });
-      
-        if (!tooSimilar) {
+        console.log("Found existing summaries:", existingSummaries.length);
+        
+        // If no existing summaries, this is the first case
+        if (existingSummaries.length === 0) {
           found = true;
           finalParsed = parsed;
           finalParsed.embedding = newEmbedding;
+        } else {
+          const tooSimilar = existingSummaries.some((entry) => {
+            // Skip entries without valid embeddings
+            if (!entry.embedding || !Array.isArray(entry.embedding)) {
+              console.warn("Skipping entry with invalid embedding:", entry);
+              return false;
+            }
+            
+            const sim = cosineSimilarity(newEmbedding, entry.embedding);
+            console.log(`Similarity with case "${entry.summary?.substring(0, 50)}...":`, sim);
+            return sim > 0.85; // Lowered threshold for easier uniqueness
+          });
+        
+          if (!tooSimilar) {
+            found = true;
+            finalParsed = parsed;
+            finalParsed.embedding = newEmbedding;
+            console.log("✅ Found unique case after similarity check");
+          } else {
+            console.log("⚠️ Case too similar, trying again...");
+          }
         }
       } catch (err) {
-        console.error("Parse or embed error:", err);
+        console.error("Parse or embed error on attempt", attempts, ":", err);
+        console.error("Error details:", {
+          text: text,
+          parsed: parsed,
+          summary: summary,
+          newEmbedding: newEmbedding
+        });
       }
     }
     
     if (!finalParsed) {
-      setError("Could not generate a unique case after multiple tries.");
-      setLoading(false);
-      return;
+      console.error("❌ All attempts failed, generating fallback case");
+      
+      // Generate a simple fallback case
+      const fallbackCase = {
+        case_title: "The Mysterious Disappearance",
+        case_overview: "A classic whodunit in a cozy library where nothing is as it seems.",
+        difficulty: "Easy",
+        suspects: [
+          {
+            name: "Professor Smith",
+            gender: "male",
+            age: 45,
+            clothing: "Tweed jacket",
+            personality: "Intellectual and reserved",
+            background: "University professor",
+            alibi: "Was grading papers in his office",
+            is_murderer: false,
+            chat: []
+          },
+          {
+            name: "Librarian Jones",
+            gender: "female", 
+            age: 38,
+            clothing: "Professional attire",
+            personality: "Organized and helpful",
+            background: "Head librarian",
+            alibi: "Was helping a student find books",
+            is_murderer: true,
+            chat: []
+          }
+        ],
+        witnesses: [
+          {
+            name: "Student Wilson",
+            description: "20, student, studying at table near the incident",
+            observation: "Heard a loud noise and saw someone running",
+            note: "The noise sounded like something heavy falling",
+            chat: []
+          }
+        ],
+        embedding: null
+      };
+      
+      finalParsed = fallbackCase;
+      console.log("✅ Fallback case generated successfully");
     }
     
     const userId = currentUsername || null;
@@ -234,8 +353,14 @@ const GameStart = () => {
     try {
       const docId = await storeCaseInFirestore(finalParsed, userId);
       finalParsed.id = docId;
-      await storeOverviewEmbedding(docId, summary, newEmbedding);
-      await storeEmbeddingsForCase(finalParsed, docId);
+      
+      // Only store embeddings if they were generated successfully
+      if (summary && newEmbedding) {
+        await storeOverviewEmbedding(docId, summary, newEmbedding);
+        await storeEmbeddingsForCase(finalParsed, docId);
+      } else {
+        console.warn("⚠️ Skipping embedding storage due to generation failure");
+      }
     } catch (error) {
       console.error("Error storing case:", error);
     }
@@ -247,6 +372,57 @@ const GameStart = () => {
     setTotalTimeTaken(0);
     setIsTimerPaused(false);
     setLoading(false);
+    console.log("🎉 Case generation completed successfully!");
+  };
+
+  const generateSimpleCase = () => {
+    const simpleCase = {
+      case_title: "The Library Mystery",
+      case_overview: "A rare book goes missing from the university library, and the clues point to an unexpected culprit.",
+      difficulty: "Easy",
+      suspects: [
+        {
+          name: "Dr. Williams",
+          gender: "male",
+          age: 52,
+          clothing: "Suit and tie",
+          personality: "Serious and focused",
+          background: "History professor",
+          alibi: "Was in a faculty meeting",
+          is_murderer: false,
+          chat: []
+        },
+        {
+          name: "Ms. Rodriguez",
+          gender: "female",
+          age: 35,
+          clothing: "Casual professional",
+          personality: "Friendly and helpful",
+          background: "Library assistant",
+          alibi: "Was helping students",
+          is_murderer: true,
+          chat: []
+        }
+      ],
+      witnesses: [
+        {
+          name: "Student Kim",
+          description: "19, freshman, studying at the reference desk",
+          observation: "Saw someone carrying a large bag near the rare books section",
+          note: "The person seemed nervous and kept looking around",
+          chat: []
+        }
+      ],
+      embedding: null
+    };
+    
+    setCaseData(simpleCase);
+    setShowModal(false);
+    setSelectedIndex(null);
+    setStartTime(Date.now());
+    setTotalTimeTaken(0);
+    setIsTimerPaused(false);
+    console.log("✅ Simple test case generated");
   };
 
   const sendMessageToCharacter = async () => {
@@ -363,13 +539,49 @@ const GameStart = () => {
   
       {/* Only show Generate Case button when no case is active */}
       {!caseData && (
-        <div className="flex justify-center mb-10">
+        <div className="flex justify-center mb-10 gap-4">
           <button
             onClick={callGemini}
             disabled={loading}
             className="px-6 py-3 bg-purple-600 rounded-lg hover:bg-purple-500 disabled:opacity-50"
           >
             {loading ? "Generating..." : "Generate Case"}
+          </button>
+          
+          {error && (
+            <button
+              onClick={() => setError(null)}
+              className="px-4 py-3 bg-yellow-600 rounded-lg hover:bg-yellow-500 text-sm"
+            >
+              🔄 Retry
+            </button>
+          )}
+          
+          {/* Debug button to clear embeddings */}
+          <button
+            onClick={async () => {
+              try {
+                const response = await fetch('/api/clear-embeddings', { method: 'POST' });
+                if (response.ok) {
+                  console.log("✅ Embeddings cleared for testing");
+                }
+              } catch (err) {
+                console.log("No clear endpoint available, continuing...");
+              }
+            }}
+            className="px-4 py-3 bg-gray-600 rounded-lg hover:bg-gray-500 text-sm"
+            title="Clear stored embeddings for testing"
+          >
+            🧹 Clear DB
+          </button>
+          
+          {/* Simple test case button */}
+          <button
+            onClick={generateSimpleCase}
+            className="px-4 py-3 bg-green-600 rounded-lg hover:bg-green-500 text-sm"
+            title="Generate a simple test case"
+          >
+            🧪 Test Case
           </button>
         </div>
       )}

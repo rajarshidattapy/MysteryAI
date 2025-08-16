@@ -45,7 +45,7 @@ function Header() {
       <div className="flex items-center gap-4">
         {loggedIn && (
           <span className="text-purple-300">
-            Welcome, <span className="font-semibold">{username}</span>
+            Welcome <span className="font-semibold">{username}</span>
           </span>
         )}
         

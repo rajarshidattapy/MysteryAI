@@ -21,14 +21,22 @@ const fetchFieldFromFirestore = async (collectionName, docId, fieldName) => {
 };
 
 export const getEmbeddingFromHF = async (text) => {
-    const ApiKey = await fetchFieldFromFirestore("Apis","0","huggingfaceApi");
+    let ApiKey = await fetchFieldFromFirestore("Apis","0","huggingfaceApi");
+    
+    // Fallback API key if Firestore fetch fails
+    if (!ApiKey) {
+      console.warn("⚠️ No API key found in Firestore, using fallback key");
+      // You should replace this with a valid HuggingFace API key
+      ApiKey = "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Replace with actual fallback key
+    }
+    
     try {
       const response = await fetch(
         "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2",
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${ApiKey}`, // Replace with your real token
+            Authorization: `Bearer ${ApiKey}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
@@ -39,6 +47,10 @@ export const getEmbeddingFromHF = async (text) => {
           })
         }
       );
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
   
       const result = await response.json();
   
@@ -51,6 +63,12 @@ export const getEmbeddingFromHF = async (text) => {
   
       if (Array.isArray(result) && result.length === 384) {
         return result;
+      }
+      
+      // Check if the result indicates an authentication error
+      if (result.error && result.error.includes("authentication")) {
+        console.error("❌ HuggingFace API authentication failed. Please check your API key.");
+        return null;
       }
   
       console.warn("⚠️ Unexpected response format from HuggingFace:", result);
