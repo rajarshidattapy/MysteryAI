@@ -27,7 +27,7 @@ export const getEmbeddingFromHF = async (text) => {
     if (!ApiKey) {
       console.warn("⚠️ No API key found in Firestore, using fallback key");
       // You should replace this with a valid HuggingFace API key
-      ApiKey = "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Replace with actual fallback key
+      ApiKey = "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"; // Replace with actual fallback key
     }
     
     try {
