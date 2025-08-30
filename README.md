@@ -42,10 +42,3 @@ To run the Webapp, Clone Git Repo and run the following:
  
  npm run dev 
 
- # Team:
-
- Chaitanya Changala
-
- Sriya Choudary Yalavarthy
-
- Shubhang Vagvala 
