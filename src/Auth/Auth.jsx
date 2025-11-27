@@ -8,6 +8,14 @@ import {
   auth, 
   logoutUser 
 } from '../../Firebase/userAuth';
+import {
+  connectMonadWallet,
+  getMonadWalletAddress,
+  disconnectMonadWallet,
+  shortenAddress,
+  detectWalletProviders
+} from '../web3/monadWallet';
+
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,6 +26,54 @@ const Auth = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [walletAddress, setWalletAddress] = useState(getMonadWalletAddress());
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [availableWallets, setAvailableWallets] = useState([]);
+  const [walletConnecting, setWalletConnecting] = useState(false);
+
+ // Open modal and detect wallets
+const openWalletModal = () => {
+  setError('');
+
+  const wallets = detectWalletProviders();
+
+  if (!wallets.length) {
+    setError('No EVM wallet found. Please install MetaMask / Phantom / Rabby, etc.');
+    return;
+  }
+
+  setAvailableWallets(wallets);
+  setWalletModalOpen(true);
+};
+
+// Called when user picks a wallet from the modal
+const handleWalletChoice = async (walletId) => {
+  if (walletConnecting) return; // prevents double clicks
+
+  setWalletConnecting(true);
+  setLoading(true);
+  setError('');
+
+  try {
+    const address = await connectMonadWallet(walletId);
+    setWalletAddress(address);
+    setWalletModalOpen(false);
+    navigate('/gameStart');
+  } catch (err) {
+    if (err.code === -32002) {
+      setError("A wallet request is already open. Please check your wallet popup.");
+    } else {
+      setError(err.message || "Failed to connect wallet");
+    }
+  } finally {
+    setLoading(false);
+    setWalletConnecting(false);
+  }
+};
+
+
+
+
 
   // Check if user is already logged in
   useEffect(() => {
@@ -27,9 +83,19 @@ const Auth = () => {
       }
     });
 
+      
+
+
     // Cleanup subscription
     return () => unsubscribe();
   }, [navigate]);
+
+  // If a wallet address already exists (connected before), redirect to game
+  useEffect(() => {
+    if (walletAddress) {
+      navigate('/gameStart');
+    }
+  }, [walletAddress, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -168,6 +234,39 @@ const Auth = () => {
           </div>
         </form>
 
+                {/* Divider */}
+        <div className="mt-6 flex items-center">
+          <div className="flex-1 h-px bg-slate-700" />
+          <span className="px-3 text-xs text-slate-400 uppercase tracking-widest">
+            OR
+          </span>
+          <div className="flex-1 h-px bg-slate-700" />
+        </div>
+
+        {/* Monad wallet login */}
+        <div className="mt-4">
+          <button
+  type="button"
+  onClick={() => {
+    if (!walletAddress) {
+      openWalletModal();
+    }
+    // If walletAddress exists, we do nothing here:
+    // the useEffect will already redirect automatically.
+  }}
+  disabled={loading || walletConnecting}
+  className={`px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-md text-white font-semibold shadow-lg hover:shadow-xl transition-all w-full ${
+    loading || walletConnecting ? 'opacity-70 cursor-not-allowed' : ''
+  }`}
+>
+  {walletAddress
+    ? `Continue with Monad Wallet (${shortenAddress(walletAddress)})`
+    : 'Sign in with Monad Wallet'}
+</button>
+
+        </div>
+
+
         <div className="mt-6 text-center">
           <button
             onClick={() => {
@@ -180,6 +279,42 @@ const Auth = () => {
           </button>
         </div>
       </div>
+
+            {/* Wallet selection modal */}
+      {walletModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-slate-800 border border-purple-700 rounded-lg p-6 w-full max-w-sm shadow-2xl relative">
+            <button
+              onClick={() => setWalletModalOpen(false)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-white"
+            >
+              ✖
+            </button>
+
+            <h3 className="text-lg font-semibold text-purple-200 mb-4 text-center">
+              Choose a wallet
+            </h3>
+
+            <div className="space-y-3">
+              {availableWallets.map((w) => (
+                <button
+                  key={w.id}
+                  onClick={() => handleWalletChoice(w.id)}
+                  className="w-full px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm text-left"
+                  disabled={loading}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-4 text-xs text-slate-400 text-center">
+              Make sure your wallet is configured for the Monad network.
+            </p>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -187,15 +322,22 @@ const Auth = () => {
 export default Auth;
 
 // AuthUtils - Helper functions to use throughout the app
+// Now: consider BOTH Firebase user and Monad wallet
 export const isAuthenticated = () => {
-  return !!auth.currentUser;
+  const hasFirebaseUser = !!auth.currentUser;
+  const hasWalletUser = !!getMonadWalletAddress();
+  return hasFirebaseUser || hasWalletUser;
 };
 
 export const logout = async (navigate) => {
+  // Try Firebase logout (if you’re logged in with wallet only, this just does nothing)
   await logoutUser();
+  // Also clear wallet session
+  disconnectMonadWallet();
   navigate('/');
 };
 
+// Still fine for Firebase users. For wallet-only users this will just be empty.
 export const getUsername = () => {
   const user = auth.currentUser;
   return user ? user.displayName : '';

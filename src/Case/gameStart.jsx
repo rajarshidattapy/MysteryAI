@@ -504,12 +504,7 @@ const GameStart = () => {
   };
   
   // Redirect if not logged in
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      window.location.href = '/auth';
-    }
-  }, []);
-
+  
   return (
     <div className="min-h-screen bg-slate-900 text-white p-6 font-mono">
       <h1 className="text-3xl font-bold text-center text-purple-300 mb-6">🕵️ Murder Mystery</h1>
