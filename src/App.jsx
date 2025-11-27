@@ -6,7 +6,7 @@ import Header from './Header/header';
 import Hero from './Hero/hero';
 import GameStart from './Case/gameStart.jsx';
 import Auth from './Auth/Auth.jsx';
-import { onAuthStateChange } from '../Firebase/userAuth';
+import { onAuthStateChange } from './Supabase/userAuth';
 
 // Simple protected route component
 const ProtectedRoute = ({ children }) => {
@@ -19,12 +19,12 @@ const ProtectedRoute = ({ children }) => {
     const unsubscribe = onAuthStateChange((user) => {
       setAuthenticated(!!user);
       setLoading(false);
-      
+
       if (!user) {
         navigate('/auth', { state: { from: location } });
       }
     });
-    
+
     return () => unsubscribe();
   }, [navigate, location]);
 
@@ -44,13 +44,13 @@ function App() {
       <Routes>
         <Route path="/" element={<Hero />} />
         <Route path="/auth" element={<Auth />} />
-        <Route 
-          path="/gameStart" 
+        <Route
+          path="/gameStart"
           element={
             <ProtectedRoute>
               <GameStart />
             </ProtectedRoute>
-          } 
+          }
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

@@ -1,7 +1,7 @@
 // src/Stats/UserStats.jsx
 import React, { useState, useEffect } from 'react';
-import { auth, db } from '../../Firebase/userAuth';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
+import { getUsername } from '../Auth/Auth';
 
 const UserStats = () => {
   const [gameStats, setGameStats] = useState([]);
@@ -11,69 +11,68 @@ const UserStats = () => {
   useEffect(() => {
     const fetchUserStats = async () => {
       setLoading(true);
-      
-      const currentUser = auth.currentUser;
-      
-      if (!currentUser) {
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
         setLoading(false);
         return;
       }
-      
-      setUsername(currentUser.displayName || '');
-      
+
+      const name = await getUsername();
+      setUsername(name);
+
       try {
-        // Get user's recent games from Firestore
-        const gamesRef = collection(db, "userGames");
-        const q = query(
-          gamesRef, 
-          where("userId", "==", currentUser.uid),
-          orderBy("timestamp", "desc"),
-          limit(5)
-        );
-        
-        const querySnapshot = await getDocs(q);
-        const games = [];
-        
-        querySnapshot.forEach((doc) => {
-          games.push({
-            id: doc.id,
-            ...doc.data(),
-            timestamp: doc.data().timestamp?.toDate?.() || new Date()
-          });
-        });
-        
-        setGameStats(games);
+        // Get user's recent games from Supabase
+        const { data: games, error } = await supabase
+          .from('games') // Assuming table name 'games' or 'user_games'
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (error) throw error;
+
+        const formattedGames = games.map(game => ({
+          id: game.id,
+          caseTitle: game.case_title || "Mystery Case",
+          solved: game.solved,
+          timeTaken: game.time_taken,
+          timestamp: new Date(game.created_at)
+        }));
+
+        setGameStats(formattedGames);
       } catch (error) {
         console.error("Error fetching stats:", error);
       }
-      
+
       setLoading(false);
     };
-    
+
     fetchUserStats();
   }, []);
-  
+
   // Format time in seconds to HH:MM:SS
   const formatTime = (seconds) => {
     if (!seconds && seconds !== 0) return "--:--:--";
-    
+
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    
+
     return `${hours.toString().padStart(2, '0')}:${minutes
       .toString()
       .padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
-  
+
   // Calculate average solve time
   const calculateAverage = () => {
     if (gameStats.length === 0) return null;
-    
+
     const totalTime = gameStats.reduce((sum, game) => sum + (game.timeTaken || 0), 0);
     return Math.floor(totalTime / gameStats.length);
   };
-  
+
   const averageTime = calculateAverage();
 
   if (loading) {
@@ -92,14 +91,14 @@ const UserStats = () => {
   return (
     <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6">
       <h3 className="text-xl font-semibold text-purple-300 mb-4">Your Recent Games</h3>
-      
+
       {averageTime !== null && (
         <div className="mb-4 text-center">
           <span className="text-gray-300">Average Time: </span>
           <span className="font-bold text-white">{formatTime(averageTime)}</span>
         </div>
       )}
-      
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -114,7 +113,7 @@ const UserStats = () => {
             {gameStats.map((game, index) => (
               <tr key={index} className="border-b border-slate-700">
                 <td className="py-2 px-2 text-white truncate max-w-[150px]">
-                  {game.caseTitle || "Mystery Case"}
+                  {game.caseTitle}
                 </td>
                 <td className="py-2 px-2 text-center">
                   {game.solved ? (
@@ -127,7 +126,7 @@ const UserStats = () => {
                   {formatTime(game.timeTaken)}
                 </td>
                 <td className="py-2 px-2 text-right text-gray-400">
-                  {new Date(game.timestamp).toLocaleDateString()}
+                  {game.timestamp.toLocaleDateString()}
                 </td>
               </tr>
             ))}

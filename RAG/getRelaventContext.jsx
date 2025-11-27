@@ -1,6 +1,5 @@
 // rag/queryRelevantEmbeddings.js
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "./../Firebase/casesDb";
+import { supabase } from "../src/supabaseClient";
 import { cosineSimilarity } from "./cosineUtils";
 import { getEmbeddingFromHF } from "./generateEmbeddingHF";
 
@@ -8,18 +7,32 @@ export const getRelevantContext = async (caseId, input) => {
   const inputEmbedding = await getEmbeddingFromHF(input);
   if (!inputEmbedding) return null;
 
-  const q = query(collection(db, "embeddings"), where("caseId", "==", caseId));
-  const snapshot = await getDocs(q);
+  // Fetch embeddings for the case from Supabase
+  const { data: embeddings, error } = await supabase
+    .from('embeddings')
+    .select('*')
+    .eq('case_id', caseId);
+
+  if (error) {
+    console.error("Error fetching embeddings:", error);
+    return null;
+  }
 
   let bestMatch = null;
   let bestScore = -1;
 
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    const score = cosineSimilarity(data.embedding, inputEmbedding);
+  embeddings.forEach(record => {
+    // Parse embedding if it's stored as a string, otherwise use as is
+    const embeddingVector = typeof record.embedding === 'string'
+      ? JSON.parse(record.embedding)
+      : record.embedding;
+
+    if (!embeddingVector) return;
+
+    const score = cosineSimilarity(embeddingVector, inputEmbedding);
     if (score > bestScore) {
       bestScore = score;
-      bestMatch = data.text;
+      bestMatch = record.text;
     }
   });
 

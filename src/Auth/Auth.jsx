@@ -1,13 +1,13 @@
 // src/Auth/Auth.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  registerUser, 
-  loginUser, 
-  onAuthStateChange, 
-  auth, 
-  logoutUser 
-} from '../../Firebase/userAuth';
+import {
+  registerUser,
+  loginUser,
+  onAuthStateChange,
+  logoutUser
+} from '../Supabase/userAuth';
+import { supabase } from '../supabaseClient';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -45,13 +45,13 @@ const Auth = () => {
     if (isLogin) {
       // Login logic
       const { user, error } = await loginUser(email, password);
-      
+
       if (error) {
         setError(error);
         setLoading(false);
         return;
       }
-      
+
       // Success - navigation handled by useEffect with onAuthStateChange
     } else {
       // Register logic
@@ -60,7 +60,7 @@ const Auth = () => {
         setLoading(false);
         return;
       }
-      
+
       if (!username.trim()) {
         setError('Username is required');
         setLoading(false);
@@ -68,16 +68,16 @@ const Auth = () => {
       }
 
       const { user, error } = await registerUser(email, password, username);
-      
+
       if (error) {
         setError(error);
         setLoading(false);
         return;
       }
-      
+
       // Success - navigation handled by useEffect with onAuthStateChange
     }
-    
+
     setLoading(false);
   };
 
@@ -110,7 +110,7 @@ const Auth = () => {
               />
             </div>
           )}
-          
+
           <div className="mb-4">
             <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
               Email
@@ -159,9 +159,8 @@ const Auth = () => {
             <button
               type="submit"
               disabled={loading}
-              className={`px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-md text-white font-semibold shadow-lg hover:shadow-xl transition-all w-full ${
-                loading ? 'opacity-70 cursor-not-allowed' : ''
-              }`}
+              className={`px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-md text-white font-semibold shadow-lg hover:shadow-xl transition-all w-full ${loading ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
             >
               {loading ? 'Processing...' : isLogin ? 'Sign In' : 'Sign Up'}
             </button>
@@ -187,8 +186,9 @@ const Auth = () => {
 export default Auth;
 
 // AuthUtils - Helper functions to use throughout the app
-export const isAuthenticated = () => {
-  return !!auth.currentUser;
+export const isAuthenticated = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return !!session;
 };
 
 export const logout = async (navigate) => {
@@ -196,7 +196,7 @@ export const logout = async (navigate) => {
   navigate('/');
 };
 
-export const getUsername = () => {
-  const user = auth.currentUser;
-  return user ? user.displayName : '';
+export const getUsername = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user ? user.user_metadata.display_name || user.user_metadata.username : '';
 };
