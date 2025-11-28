@@ -9,6 +9,10 @@ import {
   logoutUser 
 } from '../../Firebase/userAuth';
 
+// ⬇️ NEW: import the wallet component
+import { WalletConnect } from './WalletConnect';
+import { useAccount } from 'wagmi';
+
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -18,8 +22,9 @@ const Auth = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const {isConnected} = useAccount();
 
-  // Check if user is already logged in
+  // Check if user is already logged in (Firebase auth)
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
       if (user) {
@@ -30,6 +35,13 @@ const Auth = () => {
     // Cleanup subscription
     return () => unsubscribe();
   }, [navigate]);
+
+  useEffect(() =>{
+    if (isConnected){
+      console.log('wallet connected successfully');
+      navigate('/gameStart')
+    }
+  }, [isConnected, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -94,6 +106,7 @@ const Auth = () => {
           </div>
         )}
 
+        
         <form onSubmit={handleSubmit}>
           {!isLogin && (
             <div className="mb-4">
@@ -167,6 +180,18 @@ const Auth = () => {
             </button>
           </div>
         </form>
+
+        {/* 🔻 Divider between Firebase auth and Monad wallet auth */}
+        <div className="flex items-center my-6">
+          <div className="flex-1 h-px bg-slate-700" />
+          <span className="px-3 text-xs uppercase tracking-widest text-slate-400">
+            or
+          </span>
+          <div className="flex-1 h-px bg-slate-700" />
+        </div>
+
+        {/* 🟣 Monad Wallet Connect (wagmi) */}
+        <WalletConnect />
 
         <div className="mt-6 text-center">
           <button

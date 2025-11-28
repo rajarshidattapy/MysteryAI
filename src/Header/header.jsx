@@ -3,12 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, onAuthStateChange, logoutUser } from '../../Firebase/userAuth';
 
+// 🟣 NEW: wagmi imports
+import { useAccount, useDisconnect } from 'wagmi';
+
 function Header() {
   const navigate = useNavigate();
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);       // Firebase login
   const [username, setUsername] = useState('');
 
-  // Update auth state when auth state changes
+  // 🟣 Wallet state from wagmi
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+
+  // Firebase auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
       setLoggedIn(!!user);
@@ -18,8 +25,19 @@ function Header() {
     return () => unsubscribe();
   }, []);
 
+  // ✅ App considers user logged in if Firebase OR wallet is connected
+  const isAppLoggedIn = loggedIn || isConnected;
+
+  // Choose display name:
+  // Prefer Firebase username, otherwise short wallet address
+  const displayName = username
+    ? username
+    : isConnected && address
+      ? `${address.slice(0, 6)}...${address.slice(-4)}`
+      : '';
+
   const handleAuthClick = () => {
-    if (loggedIn) {
+    if (isAppLoggedIn) {
       navigate('/gameStart');
     } else {
       navigate('/auth');
@@ -27,8 +45,21 @@ function Header() {
   };
 
   const handleLogout = async () => {
-    await logoutUser();
-    navigate('/');
+    try {
+      // Logout from Firebase (if logged in)
+      if (auth.currentUser) {
+        await logoutUser();
+      }
+
+      // Disconnect wallet (if connected)
+      if (isConnected) {
+        disconnect();
+      }
+    } catch (e) {
+      console.error('Error during logout:', e);
+    } finally {
+      navigate('/');
+    }
   };
 
   return (
@@ -43,13 +74,13 @@ function Header() {
       </div>
       
       <div className="flex items-center gap-4">
-        {loggedIn && (
+        {isAppLoggedIn && displayName && (
           <span className="text-purple-300">
-            Welcome <span className="font-semibold">{username}</span>
+            Welcome <span className="font-semibold">{displayName}</span>
           </span>
         )}
         
-        {loggedIn ? (
+        {isAppLoggedIn ? (
           <div className="flex gap-3">
             <button 
               onClick={handleLogout}

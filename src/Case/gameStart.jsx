@@ -4,8 +4,8 @@ import { useCase } from "./useCase";
 import { storeCaseInFirestore, updateCaseChat } from "../../Firebase/storeCase.jsx";
 import Timer from "./timer.jsx";
 import UserStats from "../Stats/UserStats";
-import { isAuthenticated } from "../Auth/Auth";
-import { auth, db } from '../../Firebase/userAuth';
+//import { isAuthenticated } from "../Auth/Auth";
+import { auth, db, onAuthStateChange } from '../../Firebase/userAuth';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore';
 
 
@@ -15,6 +15,8 @@ import { getRelevantContext } from "./../../RAG/getRelaventContext";
 import { getEmbeddingFromHF } from "./../../RAG/generateEmbeddingHF";
 import { queryAllCaseSummaries } from "./../../RAG/queryAllCaseSummaries";
 import { storeOverviewEmbedding } from "../../RAG/storeOverviewEmbedding";
+
+import { useAccount } from "wagmi";
 
 const API_KEY = "AIzaSyA63dd1fVVukrf0mvmfFo8DoRH5vpzigPs";
 
@@ -45,6 +47,11 @@ const GameStart = () => {
   const [confirmQuitModal, setConfirmQuitModal] = useState(false);
   const [currentUsername, setCurrentUsername] = useState("");
 
+  const {isConnected} = useAccount();
+
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
   // Get current username on component mount
   useEffect(() => {
     const currentUser = localStorage.getItem('currentUser');
@@ -53,7 +60,26 @@ const GameStart = () => {
       setCurrentUsername(userData.username);
     }
   }, []);
-  
+
+ useEffect(() => {
+  const unsubscribe = onAuthStateChange((user) => {
+    setFirebaseUser(user);
+    setAuthChecked(true);
+  });
+
+  return () => unsubscribe();
+}, []);
+
+// Redirect if neither Firebase nor wallet is logged in
+useEffect(() => {
+  if (!authChecked) return; // wait until Firebase check is done
+
+  if (!firebaseUser && !isConnected) {
+    window.location.href = '/auth';
+  }
+}, [authChecked, firebaseUser, isConnected]);
+
+
   // Save game stats to localStorage
   const saveGameStats = async(result, timeTaken) => {
     
@@ -503,12 +529,8 @@ const GameStart = () => {
     callGemini(); // Generate a new case
   };
   
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      window.location.href = '/auth';
-    }
-  }, []);
+  
+  
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-6 font-mono">
