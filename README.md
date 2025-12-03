@@ -1,44 +1,94 @@
-# MysteryAI
+<div align="center">
+  <img src="public/monad.png" width="140" alt="MysteryAI Logo" />
+</div>
 
-MysteryAI is an interactive AI-driven murder mystery game. It generates dynamic cases using GenAI. Players can interrogate suspects and witnesses. Each case is unique and engaging. 
+<h1 align="center">MysteryAI</h1>
 
+<p align="center">
+  An AI-powered murder mystery game where every case is unique.<br/>
+  Interrogate suspects, analyze testimonies, and uncover the truth — powered by advanced AI and verified on blockchain.
+</p>
 
-# Tech Stack Used:
+<br/>
 
-Frontend: React, Tailwind CSS
+<div align="center">
+  <video src="public/video.mp4" width="100%" controls></video>
+</div>
 
-Database: Firebase Firestore
+## Features
 
-Authentication: Firebase Auth
+- **Dynamic Case Generation**: Each mystery is procedurally generated using Google Gemini AI with unique settings, suspects, and murder methods
+- **Interactive Interrogation**: Chat with AI-powered suspects and witnesses who respond based on their personalities and roles
+- **RAG-Enhanced Conversations**: Retrieval-Augmented Generation ensures contextually relevant responses using HuggingFace embeddings
+- **Blockchain Verification**: Game completions are recorded on Monad blockchain with cryptographic proof
+- **Dual Authentication**: Sign in with Firebase Auth or connect your Web3 wallet (MetaMask)
+- **Smart Deduplication**: Cosine similarity checks prevent repetitive case generation
+- **Leaderboard System**: Track your stats and compete with other players
+- **Timed Challenges**: Race against the clock to solve mysteries
 
-GenAI: Google Gemini 1.5 Flash API
+## Tech Stack
 
-Embeddings: HuggingFace MiniLM-L6-v2
+**Frontend**: React 19, Vite, TailwindCSS, React Router  
+**Authentication**: Firebase Auth + Web3 (Wagmi, Viem, Ethers.js)  
+**Database**: Firebase Firestore  
+**AI/ML**: Google Gemini 1.5 Flash, HuggingFace (sentence-transformers/all-MiniLM-L6-v2)  
+**Blockchain**: Monad (Mainnet & Testnet), Smart Contract integration  
+**State Management**: React Context API
 
-Backend Logic: Firebase Functions + Client-side RAG
+## Architecture
 
+- **Case Generation**: Gemini AI creates unique mysteries with suspects, witnesses, and clues
+- **Embedding Storage**: Case summaries are vectorized and stored to prevent duplicates
+- **RAG Pipeline**: User questions are embedded and matched against case context for relevant AI responses
+- **On-Chain Proof**: Solved cases are recorded on Monad blockchain with wallet signatures
+- **Stats Tracking**: Firebase stores game history, solve times, and win rates
 
-# Challenges:
+## Setup
 
-Challenges: Ensuring case variety, handling long conversations, preventing duplicate cases, and creating realistic AI responses.
+```bash
+# Clone the repository
+git clone https://github.com/sriya632/MysteryAI.git
+cd MysteryAI
 
+# Install dependencies
+npm install
 
-# Future Enhancements:
+# Run development server
+npm run dev
+```
 
-Adaptive difficulty based on player behavior.
+## Configuration
 
-Auto-learning from solved cases.
+Add your API keys to Firebase Firestore:
+- Collection: `Apis`
+- Document: `0`
+- Fields: `huggingfaceApi`, Google Gemini API key in code
 
-Voice-based interactions
+Update Firebase config in `Firebase/userAuth.jsx` and `Firebase/casesDb.jsx`
 
-Introduce visual clues
+## Smart Contract
 
+Deployed on Monad Testnet at: `0xacbA85F47BD8C1ED083e803217fb6D7Fd3baC768`
 
-# Setup:
+Records game completions with:
+- Case ID
+- Time taken
+- Solved status
+- Player address
 
-To run the Webapp, Clone Git Repo and run the following:
+## Game Flow
 
- npm i 
- 
- npm run dev 
+1. Sign in with email/password or connect Web3 wallet
+2. Generate a unique mystery case
+3. Interview suspects and witnesses through AI chat
+4. Analyze clues and make deductions
+5. Submit your accusation
+6. Get results recorded on-chain (if wallet connected)
 
+## Future Enhancements
+
+- Adaptive difficulty based on player performance
+- Voice-based interrogations
+- Visual clue system
+- Multi-player cooperative mode
+- Case sharing and community ratings
