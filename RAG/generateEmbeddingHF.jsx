@@ -1,24 +1,19 @@
-import { supabase } from "../src/supabaseClient";
+import {db} from "./../Firebase/casesDb";
 
-const fetchFieldFromSupabase = async (tableName, docId, fieldName) => {
+import { getDoc, doc } from "firebase/firestore";
+
+const fetchFieldFromFirestore = async (collectionName, docId, fieldName) => {
   try {
-    // Note: This assumes a table structure where we can fetch by some ID.
-    // Since we don't have the original Firestore data structure in Supabase yet,
-    // this is a placeholder. In a real migration, you'd have an 'app_config' or 'apis' table.
-    // For now, we'll return null to trigger the fallback.
-    return null;
+    const docRef = doc(db, collectionName, docId);
+    const docSnap = await getDoc(docRef);
 
-    /* 
-    // Example implementation if table exists:
-    const { data, error } = await supabase
-      .from(tableName)
-      .select(fieldName)
-      .eq('id', docId)
-      .single();
-
-    if (error) return null;
-    return data ? data[fieldName] : null;
-    */
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data[fieldName]; // 🎯 Return only the specific field
+    } else {
+      console.log("❌ No such document!");
+      return null;
+    }
   } catch (error) {
     console.error("🔥 Error fetching field:", error);
     return null;
@@ -26,60 +21,60 @@ const fetchFieldFromSupabase = async (tableName, docId, fieldName) => {
 };
 
 export const getEmbeddingFromHF = async (text) => {
-  // Try to fetch from Supabase (will likely fail/return null and use fallback)
-  let ApiKey = await fetchFieldFromSupabase("apis", "0", "huggingface_api");
-
-  // Fallback API key
-  if (!ApiKey) {
-    // console.warn("⚠️ No API key found, using fallback key");
-    ApiKey = "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";
-  }
-
-  try {
-    const response = await fetch(
-      "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${ApiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          inputs: text,
-          options: {
-            wait_for_model: true
-          }
-        })
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    let ApiKey = await fetchFieldFromFirestore("Apis","0","huggingfaceApi");
+    
+    // Fallback API key if Firestore fetch fails
+    if (!ApiKey) {
+      console.warn("⚠️ No API key found in Firestore, using fallback key");
+      // You should replace this with a valid HuggingFace API key
+      ApiKey = ""; // Replace with actual fallback key
     }
-
-    const result = await response.json();
-
-    if (Array.isArray(result) && Array.isArray(result[0])) {
-      const avg = result[0].map((_, i) =>
-        result.reduce((sum, row) => sum + row[i], 0) / result.length
+    
+    try {
+      const response = await fetch(
+        "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ApiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            inputs: text,
+            options: {
+              wait_for_model: true
+            }
+          })
+        }
       );
-      return avg;
-    }
-
-    if (Array.isArray(result) && result.length === 384) {
-      return result;
-    }
-
-    // Check if the result indicates an authentication error
-    if (result.error && result.error.includes("authentication")) {
-      console.error("❌ HuggingFace API authentication failed. Please check your API key.");
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const result = await response.json();
+  
+    if (Array.isArray(result) && Array.isArray(result[0])) {
+        const avg = result[0].map((_, i) =>
+          result.reduce((sum, row) => sum + row[i], 0) / result.length
+        );
+        return avg;
+      }
+  
+      if (Array.isArray(result) && result.length === 384) {
+        return result;
+      }
+      
+      // Check if the result indicates an authentication error
+      if (result.error && result.error.includes("authentication")) {
+        console.error("❌ HuggingFace API authentication failed. Please check your API key.");
+        return null;
+      }
+  
+      console.warn("⚠️ Unexpected response format from HuggingFace:", result);
+      return null;
+    } catch (err) {
+      console.error("❌ Failed to get embedding:", err);
       return null;
     }
-
-    console.warn("⚠️ Unexpected response format from HuggingFace:", result);
-    return null;
-  } catch (err) {
-    console.error("❌ Failed to get embedding:", err);
-    return null;
-  }
-};
+  };

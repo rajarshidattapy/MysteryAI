@@ -1,60 +1,72 @@
 // src/Stats/UserStats.jsx
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
-import { getUsername } from '../Auth/Auth';
+import { useAccount } from 'wagmi';
+import { auth, db } from '../../Firebase/userAuth';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 
 const UserStats = () => {
   const [gameStats, setGameStats] = useState([]);
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const { address, isConnected } = useAccount();
+
   useEffect(() => {
     const fetchUserStats = async () => {
       setLoading(true);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      let userId = null;
 
-      if (!user) {
+      if (auth.currentUser) {
+        // Email/password user
+        userId = auth.currentUser.uid;
+        setUsername(auth.currentUser.displayName || '');
+      } else if (isConnected && address) {
+        // Wallet-only user
+        userId = `wallet:${address.toLowerCase()}`;
+        // show short address as "username"
+        setUsername(`${address.slice(0, 6)}...${address.slice(-4)}`);
+      } else {
+        // Not logged in with either
         setLoading(false);
         return;
       }
 
-      const name = await getUsername();
-      setUsername(name);
-
       try {
-        // Get user's recent games from Supabase
-        const { data: games, error } = await supabase
-          .from('games') // Assuming table name 'games' or 'user_games'
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(5);
+        const gamesRef = collection(db, 'userGames');
+        const q = query(
+          gamesRef,
+          where('userId', '==', userId),
+          orderBy('timestamp', 'desc'),
+          limit(5)
+        );
 
-        if (error) throw error;
+        const querySnapshot = await getDocs(q);
+        const games = [];
 
-        const formattedGames = games.map(game => ({
-          id: game.id,
-          caseTitle: game.case_title || "Mystery Case",
-          solved: game.solved,
-          timeTaken: game.time_taken,
-          timestamp: new Date(game.created_at)
-        }));
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          games.push({
+            id: docSnap.id,
+            ...data,
+            timestamp: data.timestamp?.toDate?.() || new Date(),
+          });
+        });
 
-        setGameStats(formattedGames);
+        setGameStats(games);
       } catch (error) {
-        console.error("Error fetching stats:", error);
+        console.error('Error fetching stats:', error);
       }
 
       setLoading(false);
     };
 
     fetchUserStats();
-  }, []);
+  }, [address, isConnected]);
 
   // Format time in seconds to HH:MM:SS
   const formatTime = (seconds) => {
-    if (!seconds && seconds !== 0) return "--:--:--";
+    if (!seconds && seconds !== 0) return '--:--:--';
 
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -65,11 +77,12 @@ const UserStats = () => {
       .padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Calculate average solve time
   const calculateAverage = () => {
     if (gameStats.length === 0) return null;
-
-    const totalTime = gameStats.reduce((sum, game) => sum + (game.timeTaken || 0), 0);
+    const totalTime = gameStats.reduce(
+      (sum, game) => sum + (game.timeTaken || 0),
+      0
+    );
     return Math.floor(totalTime / gameStats.length);
   };
 
@@ -82,15 +95,26 @@ const UserStats = () => {
   if (gameStats.length === 0) {
     return (
       <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6 text-center">
-        <h3 className="text-xl font-semibold text-purple-300 mb-2">Your Game History</h3>
-        <p className="text-gray-400">No games played yet. Generate a case to start playing!</p>
+        <h3 className="text-xl font-semibold text-purple-300 mb-2">
+          Your Game History
+        </h3>
+        <p className="text-gray-400">
+          No games played yet. Generate a case to start playing!
+        </p>
       </div>
     );
   }
 
   return (
     <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6">
-      <h3 className="text-xl font-semibold text-purple-300 mb-4">Your Recent Games</h3>
+      <h3 className="text-xl font-semibold text-purple-300 mb-1">
+        Your Recent Games
+      </h3>
+      {username && (
+        <p className="text-sm text-gray-400 mb-3">
+          Player: <span className="text-white font-mono">{username}</span>
+        </p>
+      )}
 
       {averageTime !== null && (
         <div className="mb-4 text-center">
@@ -110,10 +134,10 @@ const UserStats = () => {
             </tr>
           </thead>
           <tbody>
-            {gameStats.map((game, index) => (
-              <tr key={index} className="border-b border-slate-700">
+            {gameStats.map((game) => (
+              <tr key={game.id} className="border-b border-slate-700">
                 <td className="py-2 px-2 text-white truncate max-w-[150px]">
-                  {game.caseTitle}
+                  {game.caseTitle || 'Mystery Case'}
                 </td>
                 <td className="py-2 px-2 text-center">
                   {game.solved ? (
@@ -126,7 +150,7 @@ const UserStats = () => {
                   {formatTime(game.timeTaken)}
                 </td>
                 <td className="py-2 px-2 text-right text-gray-400">
-                  {game.timestamp.toLocaleDateString()}
+                  {new Date(game.timestamp).toLocaleDateString()}
                 </td>
               </tr>
             ))}

@@ -1,16 +1,8 @@
-import { supabase } from "../src/supabaseClient";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "./../Firebase/casesDb";
 
 export const queryAllCaseSummaries = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('cases')
-      .select('id, case_title, case_overview, embedding')
-      .not('embedding', 'is', null);
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error("Error querying case summaries:", error);
-    return [];
-  }
+  const snapshot = await getDocs(collection(db, "case_overview_embeddings"));
+  return snapshot.docs
+    .map(doc => ({ ...doc.data(), id: doc.id }));
 };

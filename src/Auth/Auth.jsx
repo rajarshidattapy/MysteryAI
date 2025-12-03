@@ -5,9 +5,9 @@ import {
   registerUser,
   loginUser,
   onAuthStateChange,
+  auth,
   logoutUser
-} from '../Supabase/userAuth';
-import { supabase } from '../supabaseClient';
+} from '../../Firebase/userAuth';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -19,7 +19,7 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Check if user is already logged in
+  // Check if user is already logged in (Firebase auth)
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
       if (user) {
@@ -93,6 +93,7 @@ const Auth = () => {
             {error}
           </div>
         )}
+
 
         <form onSubmit={handleSubmit}>
           {!isLogin && (
@@ -186,9 +187,8 @@ const Auth = () => {
 export default Auth;
 
 // AuthUtils - Helper functions to use throughout the app
-export const isAuthenticated = async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  return !!session;
+export const isAuthenticated = () => {
+  return !!auth.currentUser;
 };
 
 export const logout = async (navigate) => {
@@ -196,7 +196,7 @@ export const logout = async (navigate) => {
   navigate('/');
 };
 
-export const getUsername = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user ? user.user_metadata.display_name || user.user_metadata.username : '';
+export const getUsername = () => {
+  const user = auth.currentUser;
+  return user ? user.displayName : '';
 };
