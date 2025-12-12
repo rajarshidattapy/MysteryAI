@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, onAuthStateChange, logoutUser } from '../../Firebase/userAuth';
+import { Wallet, LogOut, User, ChevronDown, Zap, ShieldCheck, Fingerprint } from 'lucide-react';
 
 // 🟣 Wagmi imports
 import { useAccount, useDisconnect, useConnect, useConnectors } from 'wagmi';
@@ -23,26 +24,17 @@ function Header() {
   // Detect available wallets
   useEffect(() => {
     const wallets = [];
-    
     if (typeof window !== 'undefined') {
-      console.log('Checking for wallets...');
-      console.log('window.ethereum:', window.ethereum);
-      console.log('window.ethereum?.isMetaMask:', window.ethereum?.isMetaMask);
-      console.log('window.phantom:', window.phantom);
-      
       if (window.ethereum?.isMetaMask) {
-        wallets.push({ name: 'MetaMask', id: 'metamask' });
+        wallets.push({ name: 'MetaMask', id: 'metamask', icon: '🦊' });
       }
       if (window.phantom?.ethereum) {
-        wallets.push({ name: 'Phantom', id: 'phantom' });
+        wallets.push({ name: 'Phantom', id: 'phantom', icon: '👻' });
       }
       if (window.ethereum && !window.ethereum.isMetaMask && !window.phantom) {
-        wallets.push({ name: 'Browser Wallet', id: 'injected' });
+        wallets.push({ name: 'Browser Wallet', id: 'injected', icon: '🌐' });
       }
     }
-    
-    console.log('Available wallets:', wallets);
-    console.log('Wagmi connectors:', connectors);
     setAvailableWallets(wallets);
   }, [connectors]);
 
@@ -52,7 +44,6 @@ function Header() {
       setLoggedIn(!!user);
       setUsername(user ? user.displayName : '');
     });
-    
     return () => unsubscribe();
   }, []);
 
@@ -63,21 +54,16 @@ function Header() {
         setShowWalletMenu(false);
       }
     };
-
     if (showWalletMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showWalletMenu]);
 
-  // ✅ App considers user logged in if Firebase OR wallet is connected
   const isAppLoggedIn = loggedIn || isConnected;
 
-  // Choose display name:
-  // Prefer Firebase username, otherwise short wallet address
   const displayName = username
     ? username
     : isConnected && address
@@ -94,15 +80,8 @@ function Header() {
 
   const handleLogout = async () => {
     try {
-      // Logout from Firebase (if logged in)
-      if (auth.currentUser) {
-        await logoutUser();
-      }
-
-      // Disconnect wallet (if connected)
-      if (isConnected) {
-        disconnect();
-      }
+      if (auth.currentUser) await logoutUser();
+      if (isConnected) disconnect();
     } catch (e) {
       console.error('Error during logout:', e);
     } finally {
@@ -112,14 +91,10 @@ function Header() {
 
   const handleWalletConnect = () => {
     try {
-      // Use the first available connector (injected)
       if (connectors.length > 0) {
         connect({ connector: connectors[0] });
         setShowWalletMenu(false);
-        // Navigate to game if not already logged in with Firebase
-        if (!loggedIn) {
-          navigate('/gameStart');
-        }
+        if (!loggedIn) navigate('/gameStart');
       }
     } catch (err) {
       console.error('Wallet connect error:', err);
@@ -127,74 +102,105 @@ function Header() {
   };
 
   return (
-    <header className="bg-slate-900 border-b border-purple-800 shadow-lg p-4 flex justify-between items-center">
-      <div className="flex items-center">
-        <h1 
+    // FIX: Changed z-50 to z-40 so it sits BEHIND the modal (which should be z-50 or z-100)
+    <header className="sticky top-0 z-40 w-full bg-black/90 backdrop-blur-xl border-b border-purple-500/20 shadow-lg font-mono transition-all duration-300">
+      <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
+        
+        {/* Logo Section */}
+        <div 
           onClick={() => navigate('/')} 
-          className="text-2xl font-bold text-purple-400 cursor-pointer"
+          className="flex items-center gap-2 cursor-pointer group select-none"
         >
-          MysteryAI
-        </h1>
-      </div>
-      
-      <div className="flex items-center gap-4">
-        {isAppLoggedIn && displayName && (
-          <span className="text-purple-300">
-            Welcome <span className="font-semibold">{displayName}</span>
-          </span>
-        )}
-        
-        {/* Wallet Connect Button */}
-        {!isConnected && (
-          <div className="relative" ref={walletMenuRef}>
-            <button 
-              onClick={() => setShowWalletMenu(!showWalletMenu)}
-              className="px-4 py-2 bg-purple-700 hover:bg-purple-600 rounded-md transition-colors text-white"
-            >
-              Connect Wallet
-            </button>
-            
-            {showWalletMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-slate-800 border border-purple-700 rounded-md shadow-xl z-50">
-                <div className="p-2">
-                  {availableWallets.length > 0 ? (
-                    availableWallets.map((wallet) => (
-                      <button
-                        key={wallet.id}
-                        onClick={handleWalletConnect}
-                        className="w-full text-left px-4 py-2 text-white hover:bg-slate-700 rounded-md transition-colors"
-                      >
-                        {wallet.name}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-4 py-2 text-gray-400 text-sm">
-                      No wallet detected. Please install MetaMask or Phantom.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+          <div className="bg-purple-900/30 p-2 rounded-lg border border-purple-500/30 group-hover:border-purple-500/80 group-hover:shadow-[0_0_15px_-5px_rgba(168,85,247,0.5)] transition-all duration-300">
+            <ShieldCheck className="w-5 h-5 text-purple-400 group-hover:text-purple-300" />
           </div>
-        )}
+          <h1 className="text-xl md:text-2xl font-bold text-white tracking-tighter group-hover:text-purple-100 transition-colors">
+            MYSTERY<span className="text-purple-500 group-hover:text-purple-400">.AI</span>
+          </h1>
+        </div>
         
-        {isAppLoggedIn ? (
-          <div className="flex gap-3">
+        {/* Right Side Controls */}
+        <div className="flex items-center gap-3 md:gap-4">
+          
+          {/* User Badge */}
+          {isAppLoggedIn && displayName && (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 rounded-full border border-slate-700 shadow-inner">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+              <span className="text-[10px] md:text-xs text-slate-300 font-bold tracking-widest uppercase flex items-center gap-1">
+                 <Fingerprint className="w-3 h-3 text-slate-500" />
+                 DET. {displayName}
+              </span>
+            </div>
+          )}
+          
+          {/* Wallet Connect Dropdown */}
+          {!isConnected && (
+            <div className="relative" ref={walletMenuRef}>
+              <button 
+                onClick={() => setShowWalletMenu(!showWalletMenu)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-700 hover:bg-purple-600 rounded-lg transition-all text-white text-xs md:text-sm font-bold uppercase tracking-wide shadow-[0_0_15px_-5px_rgba(168,85,247,0.5)] border border-purple-400/20 active:scale-95"
+              >
+                <Wallet className="w-4 h-4" />
+                <span className="hidden sm:inline">Connect Wallet</span>
+                <span className="sm:hidden">Connect</span>
+                <ChevronDown className={`w-3 h-3 transition-transform duration-300 ${showWalletMenu ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {/* Dropdown Menu */}
+              {showWalletMenu && (
+                <div className="absolute right-0 mt-3 w-64 bg-slate-950/95 backdrop-blur-xl border border-purple-500/30 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                  <div className="p-1">
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 px-3 py-2 font-bold bg-white/5">Select Interface</div>
+                    {availableWallets.length > 0 ? (
+                      availableWallets.map((wallet) => (
+                        <button
+                          key={wallet.id}
+                          onClick={handleWalletConnect}
+                          className="w-full flex items-center gap-3 px-3 py-3 text-white hover:bg-purple-600/20 hover:border-purple-500/30 border border-transparent rounded-lg transition-all group"
+                        >
+                          <span className="text-xl group-hover:scale-110 transition-transform">{wallet.icon}</span>
+                          <div className="flex flex-col items-start">
+                            <span className="text-sm font-bold group-hover:text-purple-300">{wallet.name}</span>
+                            <span className="text-[10px] text-slate-500 group-hover:text-slate-400">Initialize Connection</span>
+                          </div>
+                          <Zap className="w-3 h-3 ml-auto text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-4 text-center">
+                        <p className="text-slate-400 text-xs mb-2">No active wallet signals.</p>
+                        <a href="https://metamask.io" target="_blank" rel="noreferrer" className="text-xs text-purple-400 hover:text-purple-300 font-bold uppercase tracking-wide border-b border-purple-500/30 hover:border-purple-400">Install MetaMask</a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Action Button */}
+          {isAppLoggedIn ? (
             <button 
               onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-md transition-colors text-white"
+              className="group p-2 md:px-4 md:py-2 bg-slate-900 hover:bg-red-900/20 border border-slate-700 hover:border-red-500/50 rounded-lg transition-all text-slate-400 hover:text-red-400 flex items-center gap-2 active:scale-95"
+              title="Terminate Session"
             >
-              {isConnected ? 'Disconnect' : 'Logout'}
+              <LogOut className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+              <span className="hidden md:inline text-xs font-bold uppercase tracking-wider">Disconnect</span>
             </button>
-          </div>
-        ) : (
-          <button 
-            onClick={handleAuthClick}
-            className="px-4 py-2 bg-purple-700 hover:bg-purple-600 rounded-md transition-colors text-white"
-          >
-            Sign In
-          </button>
-        )}
+          ) : (
+            <button 
+              onClick={handleAuthClick}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-purple-900/30 border border-slate-700 hover:border-purple-500/50 rounded-lg transition-all text-white text-xs md:text-sm font-bold uppercase tracking-wide active:scale-95"
+            >
+              <User className="w-4 h-4" />
+              <span>Login</span>
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );
