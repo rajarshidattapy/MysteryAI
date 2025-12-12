@@ -1,7 +1,8 @@
 // src/Stats/WalletLeaderboard.jsx
 import React, { useEffect, useState } from 'react';
 import { db } from '../../Firebase/userAuth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
+import { Trophy, Medal, ShieldCheck, Timer, Hash } from 'lucide-react';
 
 // Helper to truncate addresses like 0x1234...abcd
 const shortAddr = (addr) =>
@@ -70,27 +71,6 @@ const WalletLeaderboard = () => {
     fetchLeaderboard();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6 text-center">
-        <p className="text-gray-300">Loading wallet leaderboard...</p>
-      </div>
-    );
-  }
-
-  if (!rows.length) {
-    return (
-      <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6 text-center">
-        <h3 className="text-xl font-semibold text-purple-300 mb-2">
-          Wallet Leaderboard
-        </h3>
-        <p className="text-gray-400">
-          No wallet-based games yet. Connect your Monad wallet and solve a case!
-        </p>
-      </div>
-    );
-  }
-
   const formatTime = (seconds) => {
     const s = seconds ?? 0;
     const mins = Math.floor(s / 60);
@@ -98,51 +78,78 @@ const WalletLeaderboard = () => {
     return `${mins}m ${secs}s`;
   };
 
-  return (
-    <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6">
-      <h3 className="text-xl font-semibold text-purple-300 mb-4">
-        Wallet Leaderboard (Verified)
-      </h3>
+  // Rank Color Logic
+  const getRankStyle = (index) => {
+    switch (index) {
+        case 0: return "text-yellow-400 bg-yellow-400/10 border-yellow-400/20"; // Gold
+        case 1: return "text-slate-300 bg-slate-300/10 border-slate-300/20";   // Silver
+        case 2: return "text-amber-600 bg-amber-600/10 border-amber-600/20";   // Bronze
+        default: return "text-slate-500 bg-slate-800/50 border-transparent";
+    }
+  };
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-purple-800">
-              <th className="text-left py-2 px-2 text-purple-200">Rank</th>
-              <th className="text-left py-2 px-2 text-purple-200">Wallet</th>
-              <th className="text-center py-2 px-2 text-purple-200">Best Time</th>
-              <th className="text-center py-2 px-2 text-purple-200">Games</th>
-              <th className="text-center py-2 px-2 text-purple-200">Proof</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, idx) => (
-              <tr key={row.walletAddress} className="border-b border-slate-700">
-                <td className="py-2 px-2 text-white">{idx + 1}</td>
-                <td className="py-2 px-2 text-white font-mono">
-                  {shortAddr(row.walletAddress)}
-                </td>
-                <td className="py-2 px-2 text-center text-white">
-                  {formatTime(row.bestTime)}
-                </td>
-                <td className="py-2 px-2 text-center text-gray-300">
-                  {row.gamesPlayed}
-                </td>
-                <td className="py-2 px-2 text-center">
-                  {row.hasSignedProof ? (
-                    <span className="text-emerald-400 text-xs font-semibold">
-                      ✅ Signed
-                    </span>
-                  ) : (
-                    <span className="text-yellow-400 text-xs">
-                      Unsigned
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  if (loading) {
+    return (
+        <div className="h-full flex items-center justify-center text-slate-500 text-xs uppercase tracking-widest animate-pulse">
+            Syncing Global Records...
+        </div>
+    );
+  }
+
+  if (!rows.length) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-500">
+        <Trophy className="w-8 h-8 mb-2 opacity-20" />
+        <span className="text-xs">No records found. Be the first.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* List Header */}
+      <div className="grid grid-cols-12 gap-2 pb-2 mb-2 border-b border-white/5 text-[10px] uppercase text-slate-500 font-bold tracking-wider">
+        <div className="col-span-1 text-center">#</div>
+        <div className="col-span-5">Detective</div>
+        <div className="col-span-3 text-right">Best Time</div>
+        <div className="col-span-3 text-center">Verified</div>
+      </div>
+
+      {/* Rows */}
+      <div className="overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+        {rows.map((row, idx) => (
+            <div key={row.walletAddress} className="grid grid-cols-12 gap-2 items-center py-2 px-1 hover:bg-white/5 rounded transition-colors group">
+                
+                {/* Rank */}
+                <div className="col-span-1 flex justify-center">
+                    <div className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold border ${getRankStyle(idx)}`}>
+                        {idx + 1}
+                    </div>
+                </div>
+
+                {/* Address */}
+                <div className="col-span-5 font-mono text-xs text-slate-300 group-hover:text-white transition-colors">
+                    {shortAddr(row.walletAddress)}
+                    {idx === 0 && <Medal className="w-3 h-3 text-yellow-400 inline ml-2" />}
+                </div>
+
+                {/* Time */}
+                <div className="col-span-3 text-right font-mono text-xs text-purple-400 font-medium">
+                    {formatTime(row.bestTime)}
+                </div>
+
+                {/* Proof */}
+                <div className="col-span-3 flex justify-center">
+                    {row.hasSignedProof ? (
+                        <div className="group/tooltip relative">
+                             <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                        </div>
+                    ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-700"></span>
+                    )}
+                </div>
+            </div>
+        ))}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { auth, db } from '../../Firebase/userAuth';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { History, Clock, Calendar, CheckCircle, XCircle, FileClock, Activity } from 'lucide-react';
 
 const UserStats = () => {
   const [gameStats, setGameStats] = useState([]);
@@ -89,74 +90,94 @@ const UserStats = () => {
   const averageTime = calculateAverage();
 
   if (loading) {
-    return <div className="text-center py-4">Loading stats...</div>;
+    return (
+        <div className="h-full flex items-center justify-center p-8 text-purple-400">
+            <Activity className="w-6 h-6 animate-pulse mr-2" />
+            <span className="text-xs font-mono uppercase tracking-widest">Accessing Archives...</span>
+        </div>
+    );
   }
 
   if (gameStats.length === 0) {
     return (
-      <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6 text-center">
-        <h3 className="text-xl font-semibold text-purple-300 mb-2">
-          Your Game History
-        </h3>
-        <p className="text-gray-400">
-          No games played yet. Generate a case to start playing!
+      <div className="h-full flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-slate-700 rounded-lg">
+        <FileClock className="w-10 h-10 text-slate-600 mb-3" />
+        <h3 className="text-slate-300 font-bold mb-1">No Case History</h3>
+        <p className="text-slate-500 text-xs max-w-[200px]">
+          Your dossier is empty, detective. Solve a mystery to build your record.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-800 rounded-xl border border-purple-900 p-6 mb-6">
-      <h3 className="text-xl font-semibold text-purple-300 mb-1">
-        Your Recent Games
-      </h3>
-      {username && (
-        <p className="text-sm text-gray-400 mb-3">
-          Player: <span className="text-white font-mono">{username}</span>
-        </p>
-      )}
-
-      {averageTime !== null && (
-        <div className="mb-4 text-center">
-          <span className="text-gray-300">Average Time: </span>
-          <span className="font-bold text-white">{formatTime(averageTime)}</span>
+    <div className="flex flex-col h-full">
+        {/* Header Section with Username & Avg Time */}
+        <div className="flex justify-between items-end mb-4 pb-4 border-b border-white/5">
+            <div>
+                <p className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-1">Operative</p>
+                <div className="text-white font-mono font-bold text-lg leading-none truncate max-w-[150px]">
+                    {username}
+                </div>
+            </div>
+            
+            {averageTime !== null && (
+                <div className="text-right">
+                    <p className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-1 flex items-center justify-end gap-1">
+                        <Clock className="w-3 h-3" /> Avg. Solve
+                    </p>
+                    <div className="font-mono text-purple-400 font-bold text-lg leading-none">
+                        {formatTime(averageTime)}
+                    </div>
+                </div>
+            )}
         </div>
-      )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-purple-800">
-              <th className="text-left py-2 px-2 text-purple-200">Case</th>
-              <th className="text-center py-2 px-2 text-purple-200">Result</th>
-              <th className="text-right py-2 px-2 text-purple-200">Time</th>
-              <th className="text-right py-2 px-2 text-purple-200">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {gameStats.map((game) => (
-              <tr key={game.id} className="border-b border-slate-700">
-                <td className="py-2 px-2 text-white truncate max-w-[150px]">
-                  {game.caseTitle || 'Mystery Case'}
-                </td>
-                <td className="py-2 px-2 text-center">
-                  {game.solved ? (
-                    <span className="text-green-400">Solved</span>
-                  ) : (
-                    <span className="text-red-400">Failed</span>
-                  )}
-                </td>
-                <td className="py-2 px-2 text-right text-white">
-                  {formatTime(game.timeTaken)}
-                </td>
-                <td className="py-2 px-2 text-right text-gray-400">
-                  {new Date(game.timestamp).toLocaleDateString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {/* Table List */}
+        <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left border-collapse">
+                <thead>
+                    <tr className="text-[10px] uppercase text-slate-500 tracking-wider border-b border-slate-800">
+                        <th className="pb-2 font-semibold">Case Title</th>
+                        <th className="pb-2 font-semibold text-center">Status</th>
+                        <th className="pb-2 font-semibold text-right">Time</th>
+                    </tr>
+                </thead>
+                <tbody className="text-sm">
+                    {gameStats.map((game, idx) => (
+                        <tr key={game.id} className="group border-b border-slate-800/50 last:border-0 hover:bg-white/5 transition-colors">
+                            <td className="py-3 pr-2 align-middle">
+                                <div className="font-medium text-slate-300 group-hover:text-white transition-colors truncate max-w-[140px]">
+                                    {game.caseTitle || 'Unidentified Case'}
+                                </div>
+                                <div className="text-[10px] text-slate-600 flex items-center gap-1 mt-0.5">
+                                    <Calendar className="w-2.5 h-2.5" />
+                                    {new Date(game.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                </div>
+                            </td>
+                            
+                            <td className="py-3 px-2 text-center align-middle">
+                                {game.solved ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                                        <CheckCircle className="w-3 h-3" />
+                                        SOLVED
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                                        <XCircle className="w-3 h-3" />
+                                        COLD
+                                    </span>
+                                )}
+                            </td>
+                            
+                            <td className="py-3 pl-2 text-right align-middle font-mono text-slate-400 group-hover:text-purple-300">
+                                {formatTime(game.timeTaken)}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
     </div>
   );
 };

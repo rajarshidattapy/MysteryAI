@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Pause, Play } from 'lucide-react';
 
-const Timer = ({ onTimePause, onTimeResume }) => {
+const Timer = ({ onTimePause, onTimeResume, onTimerEnd }) => {
   const [time, setTime] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
-  const [wasRunning, setWasRunning] = useState(true); // Track previous state
+  const [wasRunning, setWasRunning] = useState(true);
 
   useEffect(() => {
     let interval;
@@ -12,12 +13,11 @@ const Timer = ({ onTimePause, onTimeResume }) => {
         setTime(prevTime => prevTime + 1);
       }, 1000);
     }
-
     return () => clearInterval(interval);
   }, [isRunning]);
 
+  // Handle Parent Logic sync
   useEffect(() => {
-    // Avoid calling on first render
     if (wasRunning !== isRunning) {
       if (isRunning) {
         onTimeResume?.();
@@ -26,7 +26,7 @@ const Timer = ({ onTimePause, onTimeResume }) => {
       }
     }
     setWasRunning(isRunning);
-  }, [isRunning]);
+  }, [isRunning, onTimePause, onTimeResume, wasRunning]);
 
   const togglePause = () => {
     setIsRunning(prev => !prev);
@@ -43,19 +43,25 @@ const Timer = ({ onTimePause, onTimeResume }) => {
   };
 
   return (
-    <div className="flex items-center space-x-4">
+    <div className="flex items-center gap-3 select-none">
       <div
-        className={`text-xl font-bold ${
-          time > 1800 ? 'text-red-500' : 'text-white'
+        className={`font-mono text-sm tracking-widest ${
+          time > 1800 ? 'text-red-400 animate-pulse' : 'text-purple-100'
         }`}
       >
         {formatTime(time)}
       </div>
+      
       <button
         onClick={togglePause}
-        className="px-3 py-1 bg-purple-600 hover:bg-purple-500 rounded text-white"
+        className="p-1 rounded hover:bg-white/10 text-purple-300 hover:text-white transition-colors focus:outline-none"
+        title={isRunning ? "Pause Investigation" : "Resume"}
       >
-        {isRunning ? 'Pause' : 'Resume'}
+        {isRunning ? (
+            <Pause className="w-3 h-3 fill-current" />
+        ) : (
+            <Play className="w-3 h-3 fill-current" />
+        )}
       </button>
     </div>
   );
