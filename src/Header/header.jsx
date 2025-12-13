@@ -1,21 +1,19 @@
-// src/Header/header.jsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { onAuthStateChange, signOut } from '../Supabase/auth.js';
+import { auth, onAuthStateChange, logoutUser } from '../../Firebase/userAuth';
 import { Wallet, LogOut, User, ChevronDown, Zap, ShieldCheck, Fingerprint } from 'lucide-react';
 
 // 🟣 Wagmi imports
-import { useAccount, useDisconnect, useConnect, useConnectors } from 'wagmi';
+import { useAccount, useDisconnect } from 'wagmi';
 
 function Header() {
   const navigate = useNavigate();
-  const [loggedIn, setLoggedIn] = useState(false);       // Firebase login
-  const [username, setUsername] = useState('');
-  const [showWalletMenu, setShowWalletMenu] = useState(false);
-  const [availableWallets, setAvailableWallets] = useState([]);
-  const walletMenuRef = useRef(null);
 
-  // 🟣 Wallet state from wagmi
+  // 🔐 Firebase auth state
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [username, setUsername] = useState('');
+
+  // 🟣 Wallet state
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { connect } = useConnect();
@@ -38,7 +36,7 @@ function Header() {
     setAvailableWallets(wallets);
   }, [connectors]);
 
-  // Supabase auth listener
+  // Firebase auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
       setLoggedIn(!!user);
@@ -49,29 +47,17 @@ function Header() {
     };
   }, []);
 
-  // Close wallet menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (walletMenuRef.current && !walletMenuRef.current.contains(event.target)) {
-        setShowWalletMenu(false);
-      }
-    };
-    if (showWalletMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showWalletMenu]);
-
+  // ✅ Combined auth state
   const isAppLoggedIn = loggedIn || isConnected;
 
+  // 🧾 Display name priority: Firebase → Wallet
   const displayName = username
     ? username
     : isConnected && address
       ? `${address.slice(0, 6)}...${address.slice(-4)}`
       : '';
 
+  // 👉 Login / Game route
   const handleAuthClick = () => {
     if (isAppLoggedIn) {
       navigate('/gameStart');
@@ -80,33 +66,26 @@ function Header() {
     }
   };
 
+  // 🔌 Connect wallet route
+  const handleConnectWalletRoute = () => {
+    navigate('/connect-wallet');
+  };
+
+  // 🚪 Logout (Firebase + Wallet)
   const handleLogout = async () => {
     try {
       // Supabase logout
       await signOut();
       if (isConnected) disconnect();
-    } catch (e) {
-      console.error('Error during logout:', e);
+    } catch (err) {
+      console.error('Logout error:', err);
     } finally {
       navigate('/');
     }
   };
 
-  const handleWalletConnect = () => {
-    try {
-      if (connectors.length > 0) {
-        connect({ connector: connectors[0] });
-        setShowWalletMenu(false);
-        if (!loggedIn) navigate('/gameStart');
-      }
-    } catch (err) {
-      console.error('Wallet connect error:', err);
-    }
-  };
-
   return (
-    // FIX: Changed z-50 to z-40 so it sits BEHIND the modal (which should be z-50 or z-100)
-    <header className="sticky top-0 z-40 w-full bg-black/90 backdrop-blur-xl border-b border-purple-500/20 shadow-lg font-mono transition-all duration-300">
+    <header className="sticky top-0 z-40 w-full bg-black/90 backdrop-blur-xl border-b border-purple-500/20 shadow-lg font-mono">
       <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
 
         {/* Logo Section */}
@@ -114,11 +93,11 @@ function Header() {
           onClick={() => navigate('/')}
           className="flex items-center gap-2 cursor-pointer group select-none"
         >
-          <div className="bg-purple-900/30 p-2 rounded-lg border border-purple-500/30 group-hover:border-purple-500/80 group-hover:shadow-[0_0_15px_-5px_rgba(168,85,247,0.5)] transition-all duration-300">
-            <ShieldCheck className="w-5 h-5 text-purple-400 group-hover:text-purple-300" />
+          <div className="bg-purple-900/30 p-2 rounded-lg border border-purple-500/30 group-hover:border-purple-500/80 transition-all">
+            <ShieldCheck className="w-5 h-5 text-purple-400" />
           </div>
-          <h1 className="text-xl md:text-2xl font-bold text-white tracking-tighter group-hover:text-purple-100 transition-colors">
-            MYSTERY<span className="text-purple-500 group-hover:text-purple-400">.AI</span>
+          <h1 className="text-xl md:text-2xl font-bold text-white tracking-tighter">
+            MYSTERY<span className="text-purple-500">.AI</span>
           </h1>
         </div>
 
@@ -127,10 +106,10 @@ function Header() {
 
           {/* User Badge */}
           {isAppLoggedIn && displayName && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 rounded-full border border-slate-700 shadow-inner">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 rounded-full border border-slate-700">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
               </span>
               <span className="text-[10px] md:text-xs text-slate-300 font-bold tracking-widest uppercase flex items-center gap-1">
                 <Fingerprint className="w-3 h-3 text-slate-500" />
@@ -189,10 +168,12 @@ function Header() {
             <button
               onClick={handleLogout}
               className="group p-2 md:px-4 md:py-2 bg-slate-900 hover:bg-red-900/20 border border-slate-700 hover:border-red-500/50 rounded-lg transition-all text-slate-400 hover:text-red-400 flex items-center gap-2 active:scale-95"
-              title="Terminate Session"
+              title="Disconnect"
             >
               <LogOut className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-              <span className="hidden md:inline text-xs font-bold uppercase tracking-wider">Disconnect</span>
+              <span className="hidden md:inline text-xs font-bold uppercase tracking-wider">
+                Disconnect
+              </span>
             </button>
           ) : (
             <button

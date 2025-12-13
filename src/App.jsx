@@ -6,7 +6,7 @@ import Header from './Header/header';
 import Hero from './Hero/hero';
 import GameStart from './Case/gameStart.jsx';
 import Auth from './Auth/Auth.jsx';
-import { onAuthStateChange } from './Supabase/auth.js';
+import { onAuthStateChange } from '../Firebase/userAuth';
 
 function App() {
   return (
@@ -15,13 +15,14 @@ function App() {
       <Routes>
         <Route path="/" element={<Hero />} />
         <Route path="/auth" element={<Auth />} />
-        <Route 
-          path="/gameStart" 
+        <Route path="/connect-wallet" element={<ConnectWalletPage />} />
+        <Route
+          path="/gameStart"
           element={
-            
-              <GameStart />
-            
-          } 
+
+            <GameStart />
+
+          }
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
