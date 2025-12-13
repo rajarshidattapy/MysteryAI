@@ -1,3 +1,4 @@
+// import { isAuthenticated, logout, getUsername } from './authUtils';
 // src/Auth/Auth.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -6,9 +7,9 @@ import {
   registerUser,
   loginUser,
   onAuthStateChange,
-  auth,
-  logoutUser
-} from '../../Firebase/userAuth';
+  // auth,
+  // logoutUser
+} from '../Supabase/auth.js';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -45,10 +46,10 @@ const Auth = () => {
 
     if (isLogin) {
       // Login logic
-      const { user, error } = await loginUser(email, password);
+      const { error } = await loginUser(email, password);
 
       if (error) {
-        setError(error);
+        setError(error.message || 'Login failed');
         setLoading(false);
         return;
       }
@@ -66,10 +67,10 @@ const Auth = () => {
         return;
       }
 
-      const { user, error } = await registerUser(email, password, username);
+      const { error } = await registerUser(email, password, username);
 
       if (error) {
-        setError(error);
+        setError(error.message || 'Registration failed');
         setLoading(false);
         return;
       }
@@ -87,7 +88,7 @@ const Auth = () => {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-black font-mono relative overflow-hidden">
-      
+
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/20 blur-[100px] rounded-full pointer-events-none"></div>
@@ -95,16 +96,16 @@ const Auth = () => {
 
       {/* Main Card */}
       <div className="w-full max-w-md relative z-10">
-        
+
         {/* Card Header (Tabs) */}
         <div className="flex bg-slate-900/80 backdrop-blur-md rounded-t-2xl border border-purple-500/30 border-b-0 overflow-hidden">
-          <button 
+          <button
             onClick={() => { setIsLogin(true); setError(''); }}
             className={`flex-1 py-4 text-sm font-bold tracking-wider transition-colors ${isLogin ? 'bg-purple-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
           >
             ACCESS TERMINAL
           </button>
-          <button 
+          <button
             onClick={() => { setIsLogin(false); setError(''); }}
             className={`flex-1 py-4 text-sm font-bold tracking-wider transition-colors ${!isLogin ? 'bg-purple-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
           >
@@ -114,7 +115,7 @@ const Auth = () => {
 
         {/* Card Body */}
         <div className="bg-black/60 backdrop-blur-xl border border-purple-500/30 rounded-b-2xl shadow-[0_0_40px_-10px_rgba(168,85,247,0.3)] p-8">
-          
+
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-900/30 border border-purple-500/50 mb-4">
               <Shield className="w-6 h-6 text-purple-400" />
@@ -135,7 +136,7 @@ const Auth = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            
+
             {/* Username Field (Register Only) */}
             {!isLogin && (
               <div className="space-y-1">
@@ -215,9 +216,8 @@ const Auth = () => {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all shadow-lg hover:shadow-purple-500/25 mt-6 ${
-                loading ? 'opacity-75 cursor-not-allowed' : ''
-              }`}
+              className={`w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all shadow-lg hover:shadow-purple-500/25 mt-6 ${loading ? 'opacity-75 cursor-not-allowed' : ''
+                }`}
             >
               {loading ? (
                 <>
@@ -234,10 +234,10 @@ const Auth = () => {
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-800 text-center">
-             <p className="text-slate-400 text-sm mb-2">
-                {isLogin ? "No clearance yet?" : "Already an agent?"}
-             </p>
-             <button
+            <p className="text-slate-400 text-sm mb-2">
+              {isLogin ? "No clearance yet?" : "Already an agent?"}
+            </p>
+            <button
               onClick={toggleAuthMode}
               className="text-purple-400 hover:text-purple-300 text-sm font-semibold hover:underline decoration-purple-500/50 underline-offset-4 transition-all"
             >
@@ -253,16 +253,4 @@ const Auth = () => {
 export default Auth;
 
 // AuthUtils - Helper functions
-export const isAuthenticated = () => {
-  return !!auth.currentUser;
-};
-
-export const logout = async (navigate) => {
-  await logoutUser();
-  navigate('/');
-};
-
-export const getUsername = () => {
-  const user = auth.currentUser;
-  return user ? user.displayName : '';
-};
+// Moved utility exports to authUtils.js

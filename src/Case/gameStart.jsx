@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import Accusation from "./accusation";
 import { useCase } from "./useCase";
-import { storeCaseInFirestore, updateCaseChat } from "../../Firebase/storeCase.jsx";
+import { storeCase, updateCaseChat, updateUserStats } from "../Supabase/cases.js";
 import Timer from "./timer.jsx";
 import UserStats from "../Stats/UserStats";
-import { auth, db, onAuthStateChange } from '../../Firebase/userAuth';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore';
+import { onAuthStateChange } from '../Supabase/auth.js';
+
 
 import { ethers } from "ethers";
-import { storeEmbeddingsForCase } from "./../../Firebase/storeEmbeddings";
-import { cosineSimilarity } from "../../RAG/cosineUtils";
-import { getRelevantContext } from "./../../RAG/getRelaventContext"; 
-import { getEmbeddingFromHF } from "./../../RAG/generateEmbeddingHF";
-import { queryAllCaseSummaries } from "./../../RAG/queryAllCaseSummaries";
-import { storeOverviewEmbedding } from "../../RAG/storeOverviewEmbedding";
+import { storeEmbeddingsForCase } from "../Supabase/embeddings.js";
+import { getRelevantContext } from '../Supabase/getRelevantContext.js';
+import { queryAllCaseSummaries } from '../Supabase/queryAllCaseSummaries.js';
+import { storeOverviewEmbedding } from '../Supabase/storeOverviewEmbedding.js';
 import WalletLeaderboard from "../Stats/WalletLeaderboard.jsx";
 import { useAccount, useChainId, useWalletClient } from "wagmi";
 import { MYSTERY_PROOF_ABI, MYSTERY_PROOF_ADDRESS } from "../monad/proofContract.js";
@@ -155,28 +153,8 @@ const GameStart = () => {
     console.log("💾 Saving game stats...", { userId, result, timeTaken, caseId: caseData?.id });
 
     try {
-      await addDoc(collection(db, "userGames"), {
-        userId,
-        walletAddress: address ? address.toLowerCase() : null,
-        caseTitle: caseData?.case_title || "Mystery Case",
-        solved: result,
-        timeTaken: timeTaken,
-        timestamp: serverTimestamp(),
-        caseId: caseData?.id || null,
-        walletProofSignature: proof?.signature || null,
-        walletProofMessage: proof?.message || null,
-        walletProofChainId: proof?.chainId || null,
-      });
-
-      if (auth.currentUser) {
-        const userRef = doc(db, "userDetails", auth.currentUser.uid);
-        await updateDoc(userRef, {
-          "stats.gamesPlayed": increment(1),
-          "stats.wins": increment(result ? 1 : 0),
-          "stats.totalSolveTime": increment(timeTaken),
-        });
-      }
-      
+      // Save user stats using Supabase
+      await updateUserStats(userId, result, timeTaken);
       console.log("✅ Game stats saved successfully");
     } catch (error) {
       console.error("❌ Error saving game stats:", error);
@@ -457,13 +435,11 @@ const GameStart = () => {
 
       console.log("👤 Owner ID:", ownerId);
 
-      const docId = await storeCaseInFirestore(finalParsed, userId);
-      
+      const docId = await storeCase(finalParsed, userId);
       if (!docId) {
-        console.error("❌ No document ID returned from storeCaseInFirestore");
+        console.error("❌ No document ID returned from storeCase");
         throw new Error("Failed to store case - no document ID");
       }
-      
       finalParsed.id = docId;
       console.log("✅ Case stored with ID:", docId);
       

@@ -1,7 +1,6 @@
 // src/Stats/WalletLeaderboard.jsx
 import React, { useEffect, useState } from 'react';
-import { db } from '../../Firebase/userAuth';
-import { collection, getDocs } from 'firebase/firestore';
+import { supabase } from '../Supabase/supabaseClient.js';
 import { Trophy, Medal, ShieldCheck, Timer, Hash } from 'lucide-react';
 
 // Helper to truncate addresses like 0x1234...abcd
@@ -16,21 +15,23 @@ const WalletLeaderboard = () => {
     const fetchLeaderboard = async () => {
       setLoading(true);
 
+
       try {
-        const gamesRef = collection(db, 'userGames');
-        // Get all games that have a walletAddress (we’ll filter client-side)
-        const snap = await getDocs(gamesRef);
+        // Fetch all userGames with walletAddress and solved=true from Supabase
+        let { data: games, error } = await supabase
+          .from('userGames')
+          .select('*')
+          .not('walletAddress', 'is', null)
+          .eq('solved', true);
+
+        if (error) throw error;
 
         const byWallet = new Map();
-
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (!data.walletAddress) return;        // only wallet users
-          if (!data.solved) return;               // only solved cases
-
+        (games || []).forEach((data) => {
+          if (!data.walletAddress) return;
+          if (!data.solved) return;
           const key = data.walletAddress.toLowerCase();
           const existing = byWallet.get(key);
-
           const record = {
             walletAddress: data.walletAddress,
             bestTime: data.timeTaken ?? null,
@@ -38,7 +39,6 @@ const WalletLeaderboard = () => {
             wins: 1,
             hasSignedProof: !!data.walletProofSignature,
           };
-
           if (!existing) {
             byWallet.set(key, record);
           } else {
@@ -54,12 +54,10 @@ const WalletLeaderboard = () => {
             });
           }
         });
-
         const arr = Array.from(byWallet.values())
           .filter((r) => r.bestTime !== null && Number.isFinite(r.bestTime))
-          .sort((a, b) => a.bestTime - b.bestTime)  // fastest first
+          .sort((a, b) => a.bestTime - b.bestTime)
           .slice(0, 10);
-
         setRows(arr);
       } catch (err) {
         console.error('Error loading wallet leaderboard:', err);

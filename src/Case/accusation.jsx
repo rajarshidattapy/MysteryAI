@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { updateCaseWithGuess } from "./../../Firebase/storeCase";
+import { updateCaseWithGuess } from "../Supabase/cases.js";
 import { Gavel, Fingerprint, AlertTriangle, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 
 const Accusation = ({ caseData, onResetGame, onSuccessfulSolve }) => {

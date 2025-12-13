@@ -1,7 +1,7 @@
 // src/Hero/hero.jsx
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { onAuthStateChange } from '../../Firebase/userAuth';
+import { onAuthStateChange } from '../Supabase/auth.js';
 import { Search, HelpCircle, Fingerprint, Trophy, Skull, Wallet, ChevronRight } from 'lucide-react';
 
 function Hero() {

@@ -1,8 +1,8 @@
 // src/Stats/UserStats.jsx
 import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { auth, db } from '../../Firebase/userAuth';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { getCurrentUser } from '../Supabase/auth.js';
+import { supabase } from '../Supabase/supabaseClient.js';
 import { History, Clock, Calendar, CheckCircle, XCircle, FileClock, Activity } from 'lucide-react';
 
 const UserStats = () => {
@@ -16,44 +16,42 @@ const UserStats = () => {
     const fetchUserStats = async () => {
       setLoading(true);
 
-      let userId = null;
 
-      if (auth.currentUser) {
-        // Email/password user
-        userId = auth.currentUser.uid;
-        setUsername(auth.currentUser.displayName || '');
+      let userId = null;
+      let displayName = '';
+
+      // Get Supabase user
+      const { data: userSession } = await getCurrentUser();
+      const user = userSession?.user;
+
+      if (user) {
+        userId = user.id;
+        displayName = user.user_metadata?.username || user.email || '';
+        setUsername(displayName);
       } else if (isConnected && address) {
-        // Wallet-only user
         userId = `wallet:${address.toLowerCase()}`;
-        // show short address as "username"
         setUsername(`${address.slice(0, 6)}...${address.slice(-4)}`);
       } else {
-        // Not logged in with either
         setLoading(false);
         return;
       }
 
       try {
-        const gamesRef = collection(db, 'userGames');
-        const q = query(
-          gamesRef,
-          where('userId', '==', userId),
-          orderBy('timestamp', 'desc'),
-          limit(5)
-        );
+        // Query userGames from Supabase
+        let { data: games, error } = await supabase
+          .from('userGames')
+          .select('*')
+          .eq('userId', userId)
+          .order('timestamp', { ascending: false })
+          .limit(5);
 
-        const querySnapshot = await getDocs(q);
-        const games = [];
+        if (error) throw error;
 
-        querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          games.push({
-            id: docSnap.id,
-            ...data,
-            timestamp: data.timestamp?.toDate?.() || new Date(),
-          });
-        });
-
+        // Convert timestamp to Date
+        games = (games || []).map((g) => ({
+          ...g,
+          timestamp: g.timestamp ? new Date(g.timestamp) : new Date(),
+        }));
         setGameStats(games);
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -144,7 +142,7 @@ const UserStats = () => {
                     </tr>
                 </thead>
                 <tbody className="text-sm">
-                    {gameStats.map((game, idx) => (
+                    {gameStats.map((game) => (
                         <tr key={game.id} className="group border-b border-slate-800/50 last:border-0 hover:bg-white/5 transition-colors">
                             <td className="py-3 pr-2 align-middle">
                                 <div className="font-medium text-slate-300 group-hover:text-white transition-colors truncate max-w-[140px]">
