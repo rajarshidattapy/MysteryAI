@@ -7,6 +7,7 @@ import Hero from './Hero/hero';
 import GameStart from './Case/gameStart.jsx';
 import Auth from './Auth/Auth.jsx';
 import { onAuthStateChange } from '../Firebase/userAuth';
+import ConnectWalletPage from './Auth/wallet-Connect.jsx';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Hero />} />
         <Route path="/auth" element={<Auth />} />
+        <Route path="/connect-wallet" element={<ConnectWalletPage />} />
         <Route 
           path="/gameStart" 
           element={
