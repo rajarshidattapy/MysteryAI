@@ -6,7 +6,7 @@ import Header from './Header/header';
 import Hero from './Hero/hero';
 import GameStart from './Case/gameStart.jsx';
 import Auth from './Auth/Auth.jsx';
-import { onAuthStateChange } from '../Firebase/userAuth';
+import { onAuthStateChange } from './Supabase/userAuth';
 import ConnectWalletPage from './Auth/wallet-Connect.jsx';
 
 function App() {

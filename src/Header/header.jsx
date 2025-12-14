@@ -1,72 +1,85 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { auth, onAuthStateChange, logoutUser } from '../../Firebase/userAuth';
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { auth, onAuthStateChange, logoutUser } from '../../src/Supabase/userAuth'
 import {
   Wallet,
   LogOut,
   User,
   ShieldCheck,
   Fingerprint
-} from 'lucide-react';
+} from 'lucide-react'
 
 // 🟣 Wagmi imports
-import { useAccount, useDisconnect } from 'wagmi';
+import { useAccount, useDisconnect } from 'wagmi'
 
 function Header() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
-  // 🔐 Firebase auth state
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [username, setUsername] = useState('');
+  // 🔐 Auth state
+  const [loggedIn, setLoggedIn] = useState(false)
+  const [username, setUsername] = useState('')
 
   // 🟣 Wallet state
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
+  const { address, isConnected } = useAccount()
+  const { disconnect } = useDisconnect()
 
-  // 🔁 Firebase auth listener
+  // 🔁 Auth listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChange((user) => {
-      setLoggedIn(!!user);
-      setUsername(user ? user.displayName : '');
-    });
-    return () => unsubscribe();
-  }, []);
+    const { data } = onAuthStateChange((user) => {
+      setLoggedIn(!!user)
+      // Get username from user metadata
+      if (user && user.user_metadata && user.user_metadata.username) {
+        setUsername(user.user_metadata.username)
+      } else {
+        setUsername('')
+      }
+    })
+    
+    // Return cleanup function
+    return () => {
+      if (data && typeof data.subscription === 'function') {
+        data.subscription()
+      } else if (typeof data === 'function') {
+        data()
+      }
+    }
+  }, [])
 
   // ✅ Combined auth state
-  const isAppLoggedIn = loggedIn || isConnected;
+  const isAppLoggedIn = loggedIn || isConnected
 
-  // 🧾 Display name priority: Firebase → Wallet
+  // 🧾 Display name priority: Auth → Wallet
   const displayName = username
     ? username
     : isConnected && address
       ? `${address.slice(0, 6)}...${address.slice(-4)}`
-      : '';
+      : ''
 
   // 👉 Login / Game route
   const handleAuthClick = () => {
     if (isAppLoggedIn) {
-      navigate('/gameStart');
+      navigate('/gameStart')
     } else {
-      navigate('/auth');
+      navigate('/auth')
     }
-  };
+  }
 
   // 🔌 Connect wallet route
   const handleConnectWalletRoute = () => {
-    navigate('/connect-wallet');
-  };
+    navigate('/connect-wallet')
+  }
 
-  // 🚪 Logout (Firebase + Wallet)
+  // 🚪 Logout (Auth + Wallet)
   const handleLogout = async () => {
     try {
-      if (auth.currentUser) await logoutUser();
-      if (isConnected) disconnect();
+      if (auth.user()) await logoutUser()
+      if (isConnected) disconnect()
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error('Logout error:', err)
     } finally {
-      navigate('/');
+      navigate('/')
     }
-  };
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full bg-black/90 backdrop-blur-xl border-b border-purple-500/20 shadow-lg font-mono">
@@ -138,7 +151,7 @@ function Header() {
         </div>
       </div>
     </header>
-  );
+  )
 }
 
-export default Header;
+export default Header

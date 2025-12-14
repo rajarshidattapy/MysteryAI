@@ -1,29 +1,36 @@
 // src/Hero/hero.jsx
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { onAuthStateChange } from '../../Firebase/userAuth';
-import { Search, HelpCircle, Fingerprint, Trophy, Skull, Wallet, ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { onAuthStateChange } from '../../src/Supabase/userAuth'
+import { Search, HelpCircle, Fingerprint, Trophy, Skull, Wallet, ChevronRight } from 'lucide-react'
 
 function Hero() {
-  const navigate = useNavigate();
-  const [loggedIn, setLoggedIn] = useState(false);
+  const navigate = useNavigate()
+  const [loggedIn, setLoggedIn] = useState(false)
   
   useEffect(() => {
     // Update logged in status when auth state changes
-    const unsubscribe = onAuthStateChange((user) => {
-      setLoggedIn(!!user);
-    });
+    const { data } = onAuthStateChange((user) => {
+      setLoggedIn(!!user)
+    })
     
-    return () => unsubscribe();
-  }, []);
+    // Return cleanup function
+    return () => {
+      if (data && typeof data.subscription === 'function') {
+        data.subscription()
+      } else if (typeof data === 'function') {
+        data()
+      }
+    }
+  }, [])
 
   const handlePlayGame = () => {
     if (loggedIn) {
-      navigate('/gameStart');
+      navigate('/gameStart')
     } else {
-      navigate('/auth');
+      navigate('/auth')
     }
-  };
+  }
 
   return (
     <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 sm:p-6 font-mono overflow-hidden bg-black">
@@ -140,7 +147,7 @@ function Hero() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
-export default Hero;
+export default Hero

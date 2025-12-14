@@ -1,158 +1,140 @@
 // src/Stats/WalletLeaderboard.jsx
-import React, { useEffect, useState } from 'react';
-import { db } from '../../Firebase/userAuth';
-import { collection, getDocs } from 'firebase/firestore';
-import { Trophy, Medal, ShieldCheck, Timer, Hash } from 'lucide-react';
+import React, { useEffect, useState } from 'react'
+import { supabase } from '../../src/Supabase/supabaseClient'
+import { Trophy, Medal, ShieldCheck, Timer, Hash } from 'lucide-react'
 
 // Helper to truncate addresses like 0x1234...abcd
 const shortAddr = (addr) =>
-  addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : '';
+  addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : ''
 
 const WalletLeaderboard = () => {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
-      setLoading(true);
+      setLoading(true)
 
       try {
-        const gamesRef = collection(db, 'userGames');
-        // Get all games that have a walletAddress (we’ll filter client-side)
-        const snap = await getDocs(gamesRef);
+        const { data, error } = await supabase
+          .from('user_games')
+          .select('*')
+          .eq('solved', true)
+        
+        if (error) {
+          console.error("Error fetching leaderboard:", error)
+          setLoading(false)
+          return
+        }
 
-        const byWallet = new Map();
+        const byWallet = new Map()
 
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (!data.walletAddress) return;        // only wallet users
-          if (!data.solved) return;               // only solved cases
+        data.forEach((item) => {
+          if (!item.wallet_address) return // only wallet users
+          if (!item.solved) return // only solved cases
 
-          const key = data.walletAddress.toLowerCase();
-          const existing = byWallet.get(key);
+          const key = item.wallet_address.toLowerCase()
+          const existing = byWallet.get(key)
 
           const record = {
-            walletAddress: data.walletAddress,
-            bestTime: data.timeTaken ?? null,
-            gamesPlayed: 1,
-            wins: 1,
-            hasSignedProof: !!data.walletProofSignature,
-          };
-
-          if (!existing) {
-            byWallet.set(key, record);
-          } else {
-            byWallet.set(key, {
-              walletAddress: data.walletAddress,
-              bestTime: Math.min(
-                existing.bestTime ?? Infinity,
-                data.timeTaken ?? Infinity
-              ),
-              gamesPlayed: existing.gamesPlayed + 1,
-              wins: existing.wins + 1,
-              hasSignedProof: existing.hasSignedProof || !!data.walletProofSignature,
-            });
+            wallet_address: item.wallet_address,
+            best_time: item.time_taken ?? null,
+            games_solved: 1,
+            last_played: item.timestamp
           }
-        });
 
-        const arr = Array.from(byWallet.values())
-          .filter((r) => r.bestTime !== null && Number.isFinite(r.bestTime))
-          .sort((a, b) => a.bestTime - b.bestTime)  // fastest first
-          .slice(0, 10);
+          if (existing) {
+            // Merge with existing record
+            byWallet.set(key, {
+              ...existing,
+              best_time: Math.min(existing.best_time, record.best_time),
+              games_solved: existing.games_solved + 1,
+              last_played: new Date(Math.max(new Date(existing.last_played), new Date(record.last_played)))
+            })
+          } else {
+            byWallet.set(key, record)
+          }
+        })
 
-        setRows(arr);
+        // Convert map to array and sort
+        const sorted = Array.from(byWallet.values())
+          .sort((a, b) => a.best_time - b.best_time)
+          .slice(0, 10)
+
+        setRows(sorted)
       } catch (err) {
-        console.error('Error loading wallet leaderboard:', err);
+        console.error("Error processing leaderboard:", err)
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false);
-    };
-
-    fetchLeaderboard();
-  }, []);
-
-  const formatTime = (seconds) => {
-    const s = seconds ?? 0;
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins}m ${secs}s`;
-  };
-
-  // Rank Color Logic
-  const getRankStyle = (index) => {
-    switch (index) {
-        case 0: return "text-yellow-400 bg-yellow-400/10 border-yellow-400/20"; // Gold
-        case 1: return "text-slate-300 bg-slate-300/10 border-slate-300/20";   // Silver
-        case 2: return "text-amber-600 bg-amber-600/10 border-amber-600/20";   // Bronze
-        default: return "text-slate-500 bg-slate-800/50 border-transparent";
     }
-  };
+
+    fetchLeaderboard()
+  }, [])
 
   if (loading) {
     return (
-        <div className="h-full flex items-center justify-center text-slate-500 text-xs uppercase tracking-widest animate-pulse">
-            Syncing Global Records...
-        </div>
-    );
-  }
-
-  if (!rows.length) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-500">
-        <Trophy className="w-8 h-8 mb-2 opacity-20" />
-        <span className="text-xs">No records found. Be the first.</span>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-slate-500 text-sm">Loading leaderboard...</div>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* List Header */}
-      <div className="grid grid-cols-12 gap-2 pb-2 mb-2 border-b border-white/5 text-[10px] uppercase text-slate-500 font-bold tracking-wider">
-        <div className="col-span-1 text-center">#</div>
-        <div className="col-span-5">Detective</div>
-        <div className="col-span-3 text-right">Best Time</div>
-        <div className="col-span-3 text-center">Verified</div>
-      </div>
-
-      {/* Rows */}
-      <div className="overflow-y-auto pr-1 space-y-1 custom-scrollbar">
-        {rows.map((row, idx) => (
-            <div key={row.walletAddress} className="grid grid-cols-12 gap-2 items-center py-2 px-1 hover:bg-white/5 rounded transition-colors group">
-                
-                {/* Rank */}
-                <div className="col-span-1 flex justify-center">
-                    <div className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold border ${getRankStyle(idx)}`}>
-                        {idx + 1}
-                    </div>
+    <div className="space-y-3 h-full">
+      {rows.length === 0 ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-slate-500 text-sm text-center">
+            No solved cases yet.<br />Be the first to solve a mystery!
+          </div>
+        </div>
+      ) : (
+        rows.map((row, i) => (
+          <div 
+            key={row.wallet_address} 
+            className="flex items-center justify-between p-3 bg-slate-900/50 hover:bg-slate-800/50 border border-slate-800 rounded-lg transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold ${
+                i === 0 ? 'bg-yellow-500/20 text-yellow-400' : 
+                i === 1 ? 'bg-slate-600/30 text-slate-400' : 
+                i === 2 ? 'bg-amber-800/30 text-amber-600' : 
+                'bg-slate-800 text-slate-500'
+              }`}>
+                {i + 1}
+              </div>
+              <div className="flex flex-col">
+                <div className="text-sm font-medium text-white flex items-center gap-1">
+                  {shortAddr(row.wallet_address)}
+                  {i < 3 && (
+                    <Medal className={`w-3 h-3 ${
+                      i === 0 ? 'text-yellow-400' : 
+                      i === 1 ? 'text-slate-400' : 
+                      'text-amber-600'
+                    }`} />
+                  )}
                 </div>
-
-                {/* Address */}
-                <div className="col-span-5 font-mono text-xs text-slate-300 group-hover:text-white transition-colors">
-                    {shortAddr(row.walletAddress)}
-                    {idx === 0 && <Medal className="w-3 h-3 text-yellow-400 inline ml-2" />}
+                <div className="text-xs text-slate-500 flex items-center gap-1">
+                  <Hash className="w-3 h-3" />
+                  {row.games_solved} solved
                 </div>
-
-                {/* Time */}
-                <div className="col-span-3 text-right font-mono text-xs text-purple-400 font-medium">
-                    {formatTime(row.bestTime)}
-                </div>
-
-                {/* Proof */}
-                <div className="col-span-3 flex justify-center">
-                    {row.hasSignedProof ? (
-                        <div className="group/tooltip relative">
-                             <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                        </div>
-                    ) : (
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-700"></span>
-                    )}
-                </div>
+              </div>
             </div>
-        ))}
-      </div>
+            
+            <div className="flex flex-col items-end">
+              <div className="text-sm font-mono text-purple-400 flex items-center gap-1">
+                <Timer className="w-3 h-3" />
+                {row.best_time}s
+              </div>
+              <div className="text-[10px] text-slate-500">
+                {new Date(row.last_played).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        ))
+      )}
     </div>
-  );
-};
+  )
+}
 
-export default WalletLeaderboard;
+export default WalletLeaderboard

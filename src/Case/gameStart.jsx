@@ -1,287 +1,344 @@
-import React, { useState, useEffect, useRef } from "react";
-import Accusation from "./accusation";
-import { useCase } from "./useCase";
-import { storeCaseInFirestore, updateCaseChat } from "../../Firebase/storeCase.jsx";
-import Timer from "./timer.jsx";
-import UserStats from "../Stats/UserStats";
-import { auth, db, onAuthStateChange } from '../../Firebase/userAuth';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore';
-
-import { ethers } from "ethers";
-import { storeEmbeddingsForCase } from "./../../Firebase/storeEmbeddings";
-import { cosineSimilarity } from "../../RAG/cosineUtils";
-import { getRelevantContext } from "./../../RAG/getRelaventContext"; 
-import { getEmbeddingFromHF } from "./../../RAG/generateEmbeddingHF";
-import { queryAllCaseSummaries } from "./../../RAG/queryAllCaseSummaries";
-import { storeOverviewEmbedding } from "../../RAG/storeOverviewEmbedding";
-import WalletLeaderboard from "../Stats/WalletLeaderboard.jsx";
-import { useAccount, useChainId, useWalletClient } from "wagmi";
-import { MYSTERY_PROOF_ABI, MYSTERY_PROOF_ADDRESS } from "../monad/proofContract.js";
+import React, { useState, useEffect, useRef } from "react"
+import Accusation from "./accusation"
+import { useCase } from "./useCase"
+import { storeCaseInSupabase, updateCaseChat } from "../../src/Supabase/cases"
+import Timer from "./timer.jsx"
+import UserStats from "../Stats/UserStats"
+import { onAuthStateChange } from '../../src/Supabase/userAuth'
+import { supabase } from '../../src/Supabase/supabaseClient'
+import { ethers } from "ethers"
+import { storeEmbeddingsForCase } from "../../src/Supabase/embeddings"
+import { cosineSimilarity } from "../../RAG/cosineUtils"
+import { getRelevantContext } from "./../../RAG/getRelaventContext" 
+import { getEmbeddingFromHF } from "./../../RAG/generateEmbeddingHF"
+import { queryAllCaseSummaries } from "./../../RAG/queryAllCaseSummaries"
+import { storeOverviewEmbedding } from "../../RAG/storeOverviewEmbedding"
+import WalletLeaderboard from "../Stats/WalletLeaderboard.jsx"
+import { useAccount, useChainId, useWalletClient } from "wagmi"
+import { MYSTERY_PROOF_ABI, MYSTERY_PROOF_ADDRESS } from "../monad/proofContract.js"
 
 // 🎨 Icons
 import { 
   Play, MessageSquare, FileText, Users, 
   Siren, X, Clock, Send, ShieldAlert, Cpu, 
   Terminal, Database, FlaskConical, Lightbulb, Eye, Fingerprint, MapPin
-} from "lucide-react";
+} from "lucide-react"
 
-const API_KEY = "AIzaSyA63dd1fVVukrf0mvmfFo8DoRH5vpzigPs";
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "YOUR_GEMINI_API_KEY"
 
 const GameStart = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [selectedIndex, setSelectedIndex] = useState(null);
-  const [viewing, setViewing] = useState("suspect");
-  const [showModal, setShowModal] = useState(false);
-  const [currentInput, setCurrentInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
-  const chatEndRef = useRef(null); 
+  const [loading, setLoading] = useState(false)
+  const [, setError] = useState(null)
+  const [_selectedIndex, _setSelectedIndex] = useState(null)
+  const [_viewing, _setViewing] = useState("suspect")
+  const [_showModal, _setShowModal] = useState(false)
+  const [_currentInput, _setCurrentInput] = useState("")
+  const [_chatLoading, _setChatLoading] = useState(false)
+  const _chatEndRef = useRef(null) 
   
-  const { caseData, setCaseData } = useCase();
-  const [startTime, setStartTime] = useState(Date.now());
-  const [totalTimeTaken, setTotalTimeTaken] = useState(0);
-  const [isTimerPaused, setIsTimerPaused] = useState(false);
-  const [confirmQuitModal, setConfirmQuitModal] = useState(false);
-  const [currentUsername, setCurrentUsername] = useState("");
+  const { caseData, setCaseData } = useCase()
+  const [startTime, setStartTime] = useState(Date.now())
+  const [totalTimeTaken, setTotalTimeTaken] = useState(0)
+  const [isTimerPaused, setIsTimerPaused] = useState(false)
+  const [, setConfirmQuitModal] = useState(false)
+  const [currentUsername, setCurrentUsername] = useState("")
 
-  const {address, isConnected} = useAccount();
-  const chainId = useChainId();
-  const {data:walletClient} = useWalletClient();
-  const [firebaseUser, setFirebaseUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const {address, isConnected} = useAccount()
+  const chainId = useChainId()
+  const {data:walletClient} = useWalletClient()
+  const [_supabaseUser, _setSupabaseUser] = useState(null)
+  const [authChecked, setAuthChecked] = useState(false)
 
   // --- FIXED: Reliable Avatar API (DiceBear) ---
-  const getGenderBasedAvatar = (username, gender) => {
-    const seed = username ? username.replace(/\s+/g, '') : 'unknown';
-    return `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}&backgroundColor=e5e7eb,b6e3f4,c0aede&radius=50&scale=120`;
-  };
+  const getGenderBasedAvatar = (username) => {
+    const seed = username ? username.replace(/\s+/g, '') : 'unknown'
+    return `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}&backgroundColor=e5e7eb,b6e3f4,c0aede&radius=50&scale=120`
+  }
 
   // --- Auto Scroll Chat ---
-  useEffect(() => {
-    if (chatEndRef.current) {
-        chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [caseData, showModal, chatLoading]);
+  // useEffect(() => {
+  //   if (chatEndRef.current) {
+  //       chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
+  //   }
+  // }, [caseData, showModal, chatLoading])
 
   // --- Auth & Wallet Logic ---
   const createWalletProof = async (won, timeTaken, caseId) => {
     if (!isConnected || !walletClient || !address) {
-      console.log("⏭️ No wallet connected for proof generation");
-      return null;
+      console.log("⏭️ No wallet connected for proof generation")
+      return null
     }
     
-    const message = `MysteryAI proof\ncaseId: ${caseId}\nsolved: ${won}\ntimeTaken: ${timeTaken}\nchainId: ${chainId}`;
+    const message = `MysteryAI proof
+caseId: ${caseId}
+solved: ${won}
+timeTaken: ${timeTaken}
+chainId: ${chainId}`
     
     try {
-      console.log("🔐 Signing wallet proof...", { address, chainId, caseId });
-      const signature = await walletClient.signMessage({ account: address, message });
-      console.log("✅ Wallet proof signed successfully");
-      return { walletAddress: address, chainId, message, signature };
+      console.log("🔐 Signing wallet proof...", { address, chainId, caseId })
+      const signature = await walletClient.signMessage({ account: address, message })
+      console.log("✅ Wallet proof signed successfully")
+      return { walletAddress: address, chainId, message, signature }
     } catch (err) {
-      console.error('❌ Error signing wallet proof:', err);
-      return null;
+      console.error('❌ Error signing wallet proof:', err)
+      return null
     }
-  };
+  }
 
   const sendOnChainProof = async (result, timeTaken) => {
     try {
-      const MONAD_TESTNET_ID = 10143; 
+      const MONAD_TESTNET_ID = 10143 
       
       if (!isConnected || !walletClient) {
-        console.log("⏭️ Wallet not connected – skipping on-chain proof");
-        return;
+        console.log("⏭️ Wallet not connected – skipping on-chain proof")
+        return
       }
       
       if (chainId !== MONAD_TESTNET_ID) {
-        console.log("⏭️ Not on Monad Testnet – skipping on-chain proof");
-        return;
+        console.log("⏭️ Not on Monad Testnet – skipping on-chain proof")
+        return
       }
       
       if (!caseData?.id) {
-        console.log("⏭️ No case id yet – skipping on-chain proof");
-        return;
+        console.log("⏭️ No case id yet – skipping on-chain proof")
+        return
       }
       
-      console.log("📤 Sending on-chain proof...", { caseId: caseData.id, timeTaken, solved: result });
+      console.log("📤 Sending on-chain proof...", { caseId: caseData.id, timeTaken, solved: result })
       
-      const provider = new ethers.BrowserProvider(walletClient.transport);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(MYSTERY_PROOF_ADDRESS, MYSTERY_PROOF_ABI, signer);
+      // Use wagmi's public client for read operations
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const contract = new ethers.Contract(MYSTERY_PROOF_ADDRESS, MYSTERY_PROOF_ABI, signer)
       
-      const tx = await contract.recordGame(caseData.id, timeTaken, result);
-      console.log("✅ Tx sent, hash =", tx.hash);
+      const tx = await contract.recordGame(caseData.id, timeTaken, result)
+      console.log("✅ Tx sent, hash =", tx.hash)
       
-      const receipt = await tx.wait();
-      console.log("🎉 Tx mined:", receipt);
+      const receipt = await tx.wait()
+      console.log("🎉 Tx mined:", receipt)
     } catch (err) {
-      console.error("❌ Error sending on-chain proof:", err);
+      console.error("❌ Error sending on-chain proof:", err)
     }
-  };
+  }
 
   useEffect(() => {
-    const currentUser = localStorage.getItem('currentUser');
+    const currentUser = localStorage.getItem('currentUser')
     if (currentUser) {
-      const userData = JSON.parse(currentUser);
-      setCurrentUsername(userData.username);
-      console.log("👤 Current username loaded:", userData.username);
+      const userData = JSON.parse(currentUser)
+      setCurrentUsername(userData.username)
+      console.log("👤 Current username loaded:", userData.username)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
-      setFirebaseUser(user);
-      setAuthChecked(true);
-      console.log("🔐 Auth state changed:", user ? `User: ${user.uid}` : "No user");
-    });
-    return () => unsubscribe();
-  }, []);
+      _setSupabaseUser(user)
+      setAuthChecked(true)
+      console.log("🔐 Auth state changed:", user ? `User: ${user.id}` : "No user")
+    })
+    return () => unsubscribe()
+  }, [])
 
   useEffect(() => {
-    if (!authChecked) return; 
-    if (!firebaseUser && !isConnected) {
-      console.warn("⚠️ No authentication found, redirecting to /auth");
-      window.location.href = '/auth';
+    if (!authChecked) return 
+    if (!_supabaseUser && !isConnected) {
+      console.warn("⚠️ No authentication found, redirecting to /auth")
+      window.location.href = '/auth'
     }
-  }, [authChecked, firebaseUser, isConnected]);
+  }, [authChecked, _supabaseUser, isConnected])
 
   const saveGameStats = async (result, timeTaken, proof) => {
-    let userId = auth.currentUser ? auth.currentUser.uid : (address ? `wallet:${address.toLowerCase()}` : null);
+    const { data: { user } } = await supabase.auth.getUser()
+    let userId = user ? user.id : (address ? `wallet:${address.toLowerCase()}` : null)
     
     if (!userId) {
-      console.warn("⚠️ No auth user or wallet connected, skipping stats save");
-      return;
+      console.warn("⚠️ No auth user or wallet connected, skipping stats save")
+      return
     }
 
-    console.log("💾 Saving game stats...", { userId, result, timeTaken, caseId: caseData?.id });
+    console.log("💾 Saving game stats...", { userId, result, timeTaken, caseId: caseData?.id })
 
     try {
-      await addDoc(collection(db, "userGames"), {
-        userId,
-        walletAddress: address ? address.toLowerCase() : null,
-        caseTitle: caseData?.case_title || "Mystery Case",
-        solved: result,
-        timeTaken: timeTaken,
-        timestamp: serverTimestamp(),
-        caseId: caseData?.id || null,
-        walletProofSignature: proof?.signature || null,
-        walletProofMessage: proof?.message || null,
-        walletProofChainId: proof?.chainId || null,
-      });
+      // Save to user_games table
+      const { error: gameError } = await supabase
+        .from('user_games')
+        .insert([
+          {
+            user_id: userId,
+            wallet_address: address ? address.toLowerCase() : null,
+            case_title: caseData?.case_title || "Mystery Case",
+            solved: result,
+            time_taken: timeTaken,
+            timestamp: new Date(),
+            case_id: caseData?.id || null,
+            wallet_proof_signature: proof?.signature || null,
+            wallet_proof_message: proof?.message || null,
+            wallet_proof_chain_id: proof?.chainId || null
+          }
+        ])
+      
+      if (gameError) {
+        console.error("❌ Error saving game to user_games:", gameError)
+      }
 
-      if (auth.currentUser) {
-        const userRef = doc(db, "userDetails", auth.currentUser.uid);
-        await updateDoc(userRef, {
-          "stats.gamesPlayed": increment(1),
-          "stats.wins": increment(result ? 1 : 0),
-          "stats.totalSolveTime": increment(timeTaken),
-        });
+      // Update user stats
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (authUser) {
+        // Get existing user stats or create new ones
+        const { data: existingStats, error: fetchError } = await supabase
+          .from('user_stats')
+          .select('*')
+          .eq('user_id', authUser.id)
+          .single()
+        
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          console.error("Error fetching user stats:", fetchError)
+          return
+        }
+        
+        if (existingStats) {
+          // Update existing stats
+          const { error: updateError } = await supabase
+            .from('user_stats')
+            .update({
+              games_played: existingStats.games_played + 1,
+              wins: result ? existingStats.wins + 1 : existingStats.wins,
+              total_solve_time: existingStats.total_solve_time + timeTaken
+            })
+            .eq('user_id', authUser.id)
+          
+          if (updateError) {
+            console.error("Error updating user stats:", updateError)
+          }
+        } else {
+          // Create new stats
+          const { error: insertError } = await supabase
+            .from('user_stats')
+            .insert([
+              {
+                user_id: authUser.id,
+                games_played: 1,
+                wins: result ? 1 : 0,
+                total_solve_time: timeTaken
+              }
+            ])
+          
+          if (insertError) {
+            console.error("Error creating user stats:", insertError)
+          }
+        }
       }
       
-      console.log("✅ Game stats saved successfully");
+      console.log("✅ Game stats saved successfully")
     } catch (error) {
-      console.error("❌ Error saving game stats:", error);
+      console.error("❌ Error saving game stats:", error)
     }
-  };
+  }
 
   // --- Game Control Logic ---
   const handleQuit = () => {
-    console.log("⚠️ Quit requested");
-    setConfirmQuitModal(true);
-  };
+    console.log("⚠️ Quit requested")
+    setConfirmQuitModal(true)
+  }
   
   const handleTimerEnd = () => {
-    console.log("⏰ Timer ended");
-    alert("Time's up! Game over.");
-    handleGameEnd(false);
-  };
+    console.log("⏰ Timer ended")
+    alert("Time's up! Game over.")
+    handleGameEnd(false)
+  }
   
   const handleTimePause = () => {
-    console.log("⏸️ Timer paused");
-    setIsTimerPaused(true);
-    const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
-    setTotalTimeTaken(prev => prev + elapsedTime);
-  };
+    console.log("⏸️ Timer paused")
+    setIsTimerPaused(true)
+    const elapsedTime = Math.floor((Date.now() - startTime) / 1000)
+    setTotalTimeTaken(prev => prev + elapsedTime)
+  }
 
   const handleTimeResume = () => {
-    console.log("▶️ Timer resumed");
-    setIsTimerPaused(false);
-    setStartTime(Date.now());
-  };
+    console.log("▶️ Timer resumed")
+    setIsTimerPaused(false)
+    setStartTime(Date.now())
+  }
   
   const handleGameEnd = async (won, finalTime) => {
     const gameTime = finalTime || (isTimerPaused 
       ? totalTimeTaken 
-      : totalTimeTaken + Math.floor((Date.now() - startTime) / 1000));
+      : totalTimeTaken + Math.floor((Date.now() - startTime) / 1000))
 
-    console.log("🏁 Game ending...", { won, gameTime });
+    console.log("🏁 Game ending...", { won, gameTime })
 
-    const proof = caseData?.id ? await createWalletProof(won, gameTime, caseData.id) : null;
-    await saveGameStats(won, gameTime, proof);
-    await sendOnChainProof(won, gameTime);
+    const proof = caseData?.id ? await createWalletProof(won, gameTime, caseData.id) : null
+    await saveGameStats(won, gameTime, proof)
+    await sendOnChainProof(won, gameTime)
     
-    setCaseData(null);
-    setSelectedIndex(null);
-    setShowModal(false);
-    setStartTime(Date.now());
-    setTotalTimeTaken(0);
-    setIsTimerPaused(false);
+    setCaseData(null)
+    _setSelectedIndex(null)
+    _setShowModal(false)
+    setStartTime(Date.now())
+    setTotalTimeTaken(0)
+    setIsTimerPaused(false)
     
-    console.log("✅ Game ended and reset");
-  };
+    console.log("✅ Game ended and reset")
+  }
   
   const handleSuccessfulSolve = (time) => {
-    console.log("🎉 Case solved successfully!");
-    handleGameEnd(true, time);
-  };
+    console.log("🎉 Case solved successfully!")
+    handleGameEnd(true, time)
+  }
 
   // --- Case Generation / Chat ---
-  const randomSettings = ["abandoned amusement park", "deep sea research lab", "underground speakeasy", "snowbound mountain lodge", "suburban block party", "VR gaming expo", "desert music festival", "private jet", "haunted mansion"];
-  const randomEvents = ["mask reveal ceremony", "talent show", "blizzard lockdown", "power outage", "silent auction", "fire drill", "art unveiling", "company IPO party"];
-  const randomMurderMethods = ["poisoned drink", "electrocuted in bath", "stage light rig collapse", "sabotaged harness", "crossbow from behind curtain", "snake venom", "laced perfume"];
-  
-  const seed = Date.now();
-  
-  const prompt = JSON.stringify({
-    instructions: "You are an expert mystery storyteller. Generate a complex and surprising murder mystery in a unique setting.",
-    structure: {
-      setting: randomSettings[Math.floor(Math.random() * randomSettings.length)],
-      event: randomEvents[Math.floor(Math.random() * randomEvents.length)],
-      murder_method: randomMurderMethods[Math.floor(Math.random() * randomMurderMethods.length)],
-      case_title: "Generate a short creative title.",
-      case_overview: "Write an intriguing 3–5 line summary using the setting, event, and method.",
-      suspects: "Include 2–4 suspects. Only one is the murderer and is lying. Each must have unique motives, personalities, and styles.",
-      witnesses: "Include 0–2 witnesses. They are always truthful but speak vaguely.",
-      variation: "Do not repeat names, motives, or structure from prior examples."
-    },
-    output_format: "{ \"case_title\": \"...\", \"case_overview\": \"...\", \"difficulty\": \"...\", \"suspects\": [ { \"name\": \"...\", \"gender\": \"...\", \"age\": ..., \"clothing\": \"...\", \"personality\": \"...\", \"background\": \"...\", \"alibi\": \"...\", \"is_murderer\": true/false } ], \"witnesses\": [ { \"name\": \"...\", \"description\": \"age, profession, and location during the crime\", \"observation\": \"What they saw or heard, vague but truthful\", \"note\": \"Contextual detail that subtly supports or contradicts a suspect's alibi\" } ] }",
-    difficulty: "Medium",
-    randomness: "Use a timestamp-based seed to increase randomness.",
-    seed: seed
-  });
+
 
   const extractSummaryForEmbedding = (caseData) => {
-    return `${caseData.case_title}. ${caseData.case_overview}`.replace(/\n/g, " ").replace(/"/g, "'").replace(/\\+/g, " ").slice(0, 512);
-  };
+    return `${caseData.case_title}. ${caseData.case_overview}`.replace(/\n/g, " ").replace(/"/g, "'").replace(/\\+/g, " ").slice(0, 512)
+  }
 
   const callGemini = async () => {
-    setLoading(true);
-    setError(null);
-    let attempts = 0;
-    let found = false;
-    let finalParsed = null;
-    let summary = null;
-    let newEmbedding = null;
+    setLoading(true)
+    setError(null)
+    let attempts = 0
+    let found = false
+    let finalParsed = null
+    let summary = null
+    let newEmbedding = null
     
-    console.log("🚀 Starting case generation...");
+    // Generate prompt dynamically
+    const randomSettings = ["abandoned amusement park", "deep sea research lab", "underground speakeasy", "snowbound mountain lodge", "suburban block party", "VR gaming expo", "desert music festival", "private jet", "haunted mansion"]
+    const randomEvents = ["mask reveal ceremony", "talent show", "blizzard lockdown", "power outage", "silent auction", "fire drill", "art unveiling", "company IPO party"]
+    const randomMurderMethods = ["poisoned drink", "electrocuted in bath", "stage light rig collapse", "sabotaged harness", "crossbow from behind curtain", "snake venom", "laced perfume"]
+    const seed = Date.now()
+    
+    const promptObj = {
+      instructions: "You are an expert mystery storyteller. Generate a complex and surprising murder mystery in a unique setting.",
+      structure: {
+        setting: randomSettings[Math.floor(Math.random() * randomSettings.length)],
+        event: randomEvents[Math.floor(Math.random() * randomEvents.length)],
+        murder_method: randomMurderMethods[Math.floor(Math.random() * randomMurderMethods.length)],
+        case_title: "Generate a short creative title.",
+        case_overview: "Write an intriguing 3–5 line summary using the setting, event, and method.",
+        suspects: "Include 2–4 suspects. Only one is the murderer and is lying. Each must have unique motives, personalities, and styles.",
+        witnesses: "Include 0–2 witnesses. They are always truthful but speak vaguely.",
+        variation: "Do not repeat names, motives, or structure from prior examples."
+      },
+      output_format: "{ \"case_title\": \"...\", \"case_overview\": \"...\", \"difficulty\": \"...\", \"suspects\": [ { \"name\": \"...\", \"gender\": \"...\", \"age\": ..., \"clothing\": \"...\", \"personality\": \"...\", \"background\": \"...\", \"alibi\": \"...\", \"is_murderer\": true/false } ], \"witnesses\": [ { \"name\": \"...\", \"description\": \"age, profession, and location during the crime\", \"observation\": \"What they saw or heard, vague but truthful\", \"note\": \"Contextual detail that subtly supports or contradicts a suspect's alibi\" } ] }",
+      difficulty: "Medium",
+      randomness: "Use a timestamp-based seed to increase randomness.",
+      seed: seed
+    }
+    
+    const prompt = JSON.stringify(promptObj, null, 2)
+    
+    console.log("🚀 Starting case generation...")
     
     while (attempts < 5 && !found) {
-      attempts++;
-      console.log(`📝 Attempt ${attempts}/5`);
+      attempts++
+      console.log(`📝 Attempt ${attempts}/5`)
       
       try {
-        console.log("🔄 Calling Gemini API...");
+        console.log("🔄 Calling Gemini API...")
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -289,254 +346,500 @@ const GameStart = () => {
               contents: [{ parts: [{ text: prompt }] }],
             }),
           }
-        );
+        )
         
         if (!res.ok) {
-          const errorText = await res.text();
-          console.error(`❌ Gemini API HTTP error ${res.status}:`, errorText);
+          const errorText = await res.text()
+          console.error(`❌ Gemini API HTTP error ${res.status}:`, errorText)
           
           if (res.status === 429) {
-            console.warn("⚠️ Rate limited, waiting 2 seconds before retry...");
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.warn("⚠️ Rate limited, waiting 2 seconds before retry...")
+            await new Promise(resolve => setTimeout(resolve, 2000))
           }
           
-          continue;
+          continue
         }
       
-        const data = await res.json();
-        let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const data = await res.json()
+      
+      // Harden Gemini response parsing
+      if (!data.candidates || data.candidates.length === 0) {
+        console.error("❌ No candidates in Gemini response", data)
+        continue
+      }
+      
+      // Check for safety ratings
+      const candidate = data.candidates[0]
+      if (candidate.safetyRatings && candidate.safetyRatings.some(rating => rating.probability === "HIGH" || rating.probability === "MEDIUM")) {
+        console.warn("⚠️ Safety concerns in Gemini response", candidate.safetyRatings)
+      }
+      
+      let text = candidate.content?.parts?.[0]?.text
       
         if (!text) {
-          console.error("❌ No text received from Gemini API:", data);
-          continue;
+          console.error("❌ No text received from Gemini API:", data)
+          continue
         }
         
         if (data.error) {
-          console.error("❌ Gemini API error:", data.error);
-          continue;
+          console.error("❌ Gemini API error:", data.error)
+          continue
         }
       
-        text = text.replace(/```json|```/g, "").trim();
-        text = text.replace(/^\s*[\r\n]/gm, "").trim();
+        text = text.replace(/```json|```/g, "").trim()
+        text = text.replace(/^\s*[\r\n]/gm, "").trim()
         
-        let parsed;
+        let parsed
         try {
-          parsed = JSON.parse(text);
-          console.log("✅ Successfully parsed JSON response");
+          parsed = JSON.parse(text)
+          console.log("✅ Successfully parsed JSON response")
         } catch (parseError) {
-          console.error("❌ Failed to parse JSON response:", parseError);
-          console.error("Raw text:", text.substring(0, 200) + "...");
-          continue;
+          console.error("❌ Failed to parse JSON response:", parseError)
+          console.error("Raw text:", text.substring(0, 200) + "...")
+          continue
         }
         
         // Validate the parsed data has required fields
         if (!parsed.case_title || !parsed.case_overview || !parsed.suspects) {
-          console.error("❌ Invalid case data structure:", parsed);
-          continue;
+          console.error("❌ Invalid case data structure:", parsed)
+          continue
         }
         
-        console.log("✅ Case parsed successfully:", parsed.case_title);
-        summary = extractSummaryForEmbedding(parsed);
-        console.log("📊 Generated summary for embedding:", summary.substring(0, 100) + "...");
+        console.log("✅ Case parsed successfully:", parsed.case_title)
+        summary = extractSummaryForEmbedding(parsed)
+        console.log("📊 Generated summary for embedding:", summary.substring(0, 100) + "...")
         
-        newEmbedding = await getEmbeddingFromHF(summary);
+        newEmbedding = await getEmbeddingFromHF(summary)
         
         // Check if embedding generation failed
         if (!newEmbedding) {
-          console.error("❌ Failed to generate embedding for summary");
-          console.warn("⚠️ Proceeding without embedding similarity check");
-          found = true;
-          finalParsed = parsed;
-          finalParsed.embedding = null;
-          break;
+          console.error("❌ Failed to generate embedding for summary")
+          console.warn("⚠️ Proceeding without embedding similarity check")
+          found = true
+          finalParsed = parsed
+          finalParsed.embedding = null
+          break
         }
         
-        console.log("✅ Embedding generated successfully");
+        console.log("✅ Embedding generated successfully")
         
         // Get all past embeddings
-        const existingSummaries = await queryAllCaseSummaries();
-        console.log(`📚 Found ${existingSummaries.length} existing case summaries`);
+        const existingSummaries = await queryAllCaseSummaries()
+        console.log(`📚 Found ${existingSummaries.length} existing case summaries`)
         
         // If no existing summaries, this is the first case
         if (existingSummaries.length === 0) {
-          console.log("🎉 First case ever - no similarity check needed");
-          found = true;
-          finalParsed = parsed;
-          finalParsed.embedding = newEmbedding;
+          console.log("🎉 First case ever - no similarity check needed")
+          found = true
+          finalParsed = parsed
+          finalParsed.embedding = newEmbedding
         } else {
           const tooSimilar = existingSummaries.some((entry) => {
             // Skip entries without valid embeddings
             if (!entry.embedding || !Array.isArray(entry.embedding)) {
-              console.warn("⚠️ Skipping entry with invalid embedding:", entry.summary?.substring(0, 50));
-              return false;
+              console.warn("⚠️ Skipping entry with invalid embedding:", entry.summary?.substring(0, 50))
+              return false
             }
             
-            const sim = cosineSimilarity(newEmbedding, entry.embedding);
-            console.log(`📊 Similarity with "${entry.summary?.substring(0, 50)}...": ${sim.toFixed(4)}`);
-            return sim > 0.85;
-          });
+            // Validate embedding vector lengths (should be 768 for Sentence Transformers)
+            if (newEmbedding.length !== entry.embedding.length) {
+              console.warn(`⚠️ Embedding length mismatch: ${newEmbedding.length} vs ${entry.embedding.length}`)
+              return false
+            }
+            
+            const sim = cosineSimilarity(newEmbedding, entry.embedding)
+            console.log(`📊 Similarity with "${entry.summary?.substring(0, 50)}...": ${sim.toFixed(4)}`)
+            return sim > 0.75
+          })
         
           if (!tooSimilar) {
-            found = true;
-            finalParsed = parsed;
-            finalParsed.embedding = newEmbedding;
-            console.log("✅ Found unique case after similarity check");
+            found = true
+            finalParsed = parsed
+            finalParsed.embedding = newEmbedding
+            console.log("✅ Found unique case after similarity check")
           } else {
-            console.log("⚠️ Case too similar to existing cases, trying again...");
+            console.log("⚠️ Case too similar to existing cases, trying again...")
           }
         }
       } catch (err) {
-        console.error(`❌ Error on attempt ${attempts}:`, err);
+        console.error(`❌ Error on attempt ${attempts}:`, err)
         console.error("Error details:", {
           message: err.message,
           stack: err.stack
-        });
+        })
       }
     }
     
     if (!finalParsed) {
-      console.error("❌ All attempts failed, generating fallback case");
+      console.error("❌ All attempts failed, generating fallback case")
       
-      // Generate a simple fallback case
-      const fallbackCase = {
-        case_title: "The Mysterious Disappearance",
-        case_overview: "A classic whodunit in a cozy library where nothing is as it seems.",
-        difficulty: "Easy",
-        suspects: [
-          {
-            name: "Professor Smith",
-            gender: "male",
-            age: 45,
-            clothing: "Tweed jacket",
-            personality: "Intellectual and reserved",
-            background: "University professor",
-            alibi: "Was grading papers in his office",
-            is_murderer: false,
-            chat: []
-          },
-          {
-            name: "Librarian Jones",
-            gender: "female", 
-            age: 38,
-            clothing: "Professional attire",
-            personality: "Organized and helpful",
-            background: "Head librarian",
-            alibi: "Was helping a student find books",
-            is_murderer: true,
-            chat: []
-          }
-        ],
-        witnesses: [
-          {
-            name: "Student Wilson",
-            description: "20, student, studying at table near the incident",
-            observation: "Heard a loud noise and saw someone running",
-            note: "The noise sounded like something heavy falling",
-            chat: []
-          }
-        ],
-        embedding: null
-      };
+      // Generate a random fallback case from multiple options
+      const fallbackCases = [
+        // Case 1: Library Mystery
+        {
+          case_title: "The Mysterious Disappearance",
+          case_overview: "A classic murder mystery in a cozy library where nothing is as it seems.",
+          difficulty: "Easy",
+          suspects: [
+            {
+              name: "Professor Smith",
+              gender: "male",
+              age: 45,
+              clothing: "Tweed jacket",
+              personality: "Intellectual and reserved",
+              background: "University professor",
+              alibi: "Was grading papers in his office",
+              is_murderer: false,
+              chat: []
+            },
+            {
+              name: "Librarian Jones",
+              gender: "female", 
+              age: 38,
+              clothing: "Professional attire",
+              personality: "Organized and helpful",
+              background: "Head librarian",
+              alibi: "Was helping a student find books",
+              is_murderer: true,
+              chat: []
+            }
+          ],
+          witnesses: [
+            {
+              name: "Student Wilson",
+              description: "20, student, studying at table near the incident",
+              observation: "Heard a loud noise and saw someone running",
+              note: "The noise sounded like something heavy falling",
+              chat: []
+            }
+          ],
+          embedding: null
+        },
+        // Case 2: Art Gallery Heist
+        {
+          case_title: "The Vanishing Canvas",
+          case_overview: "A priceless painting disappears during a gallery opening night, with multiple suspects having opportunity.",
+          difficulty: "Medium",
+          suspects: [
+            {
+              name: "Curator Adams",
+              gender: "male",
+              age: 52,
+              clothing: "Formal suit with glasses",
+              personality: "Detail-oriented and proud",
+              background: "Chief curator with 20 years experience",
+              alibi: "Giving a tour to VIP guests",
+              is_murderer: true,
+              chat: []
+            },
+            {
+              name: "Art Critic Rivera",
+              gender: "female",
+              age: 35,
+              clothing: "Designer dress and statement jewelry",
+              personality: "Sharp-tongued and ambitious",
+              background: "Renowned art critic for major publications",
+              alibi: "Taking photos for her review",
+              is_murderer: false,
+              chat: []
+            },
+            {
+              name: "Security Guard Chen",
+              gender: "male",
+              age: 41,
+              clothing: "Uniform with radio",
+              personality: "Methodical and loyal",
+              background: "Former military, 5 years in security",
+              alibi: "Making scheduled rounds",
+              is_murderer: false,
+              chat: []
+            }
+          ],
+          witnesses: [
+            {
+              name: "Patron Martinez",
+              description: "60, wealthy art collector, near the missing painting",
+              observation: "Saw someone near the painting but couldn't identify who",
+              note: "Person seemed to be adjusting their scarf while standing close",
+              chat: []
+            }
+          ],
+          embedding: null
+        },
+        // Case 3: Corporate Espionage
+        {
+          case_title: "The Poisoned Proposal",
+          case_overview: "During a high-stakes business merger meeting, a executive collapses after drinking champagne.",
+          difficulty: "Hard",
+          suspects: [
+            {
+              name: "CEO Williams",
+              gender: "female",
+              age: 48,
+              clothing: "Tailored business suit",
+              personality: "Ruthless and calculating",
+              background: "Built company from startup to industry leader",
+              alibi: "Welcoming guests at entrance",
+              is_murderer: false,
+              chat: []
+            },
+            {
+              name: "Rival Executive Thompson",
+              gender: "male",
+              age: 55,
+              clothing: "Expensive Italian shoes and watch",
+              personality: "Competitive and vindictive",
+              background: "Head of competing company facing acquisition",
+              alibi: "In bathroom during incident",
+              is_murderer: true,
+              chat: []
+            },
+            {
+              name: "Personal Assistant Lee",
+              gender: "female",
+              age: 29,
+              clothing: "Professional blouse and skirt",
+              personality: "Efficient but secretly resentful",
+              background: "Handles all CEO's scheduling and drinks",
+              alibi: "Setting up documents in adjacent room",
+              is_murderer: false,
+              chat: []
+            },
+            {
+              name: "Company Scientist Patel",
+              gender: "male",
+              age: 42,
+              clothing: "Lab coat over casual clothes",
+              personality: "Brilliant but nervous",
+              background: "Lead researcher with breakthrough discovery",
+              alibi: "Demonstrating prototype to investors",
+              is_murderer: false,
+              chat: []
+            }
+          ],
+          witnesses: [],
+          embedding: null
+        },
+        // Case 4: Theater Murder
+        {
+          case_title: "Death on the Stage",
+          case_overview: "The lead actor is found dead in his dressing room during intermission of opening night.",
+          difficulty: "Medium",
+          suspects: [
+            {
+              name: "Leading Lady Foster",
+              gender: "female",
+              age: 33,
+              clothing: "Elegant evening gown",
+              personality: "Talented but temperamental",
+              background: "Rising star with rumors of difficult behavior",
+              alibi: "Receiving flowers in her dressing room",
+              is_murderer: false,
+              chat: []
+            },
+            {
+              name: "Stage Director Brooks",
+              gender: "male",
+              age: 58,
+              clothing: "Black turtleneck and jeans",
+              personality: "Perfectionist with a short fuse",
+              background: "Legendary director known for intense methods",
+              alibi: "Arguing with crew backstage",
+              is_murderer: true,
+              chat: []
+            },
+            {
+              name: "Costume Designer Kim",
+              gender: "female",
+              age: 45,
+              clothing: "Covered in fabric scraps",
+              personality: "Creative and meticulous",
+              background: "Award-winning designer with tight production deadlines",
+              alibi: "Fixing a costume emergency",
+              is_murderer: false,
+              chat: []
+            }
+          ],
+          witnesses: [
+            {
+              name: "Theater Usher Davis",
+              description: "26, part-time employee, cleaning nearby dressing rooms",
+              observation: "Heard raised voices but couldn't make out words",
+              note: "One voice sounded particularly angry, other seemed defensive",
+              chat: []
+            }
+          ],
+          embedding: null
+        },
+        // Case 5: Luxury Train Mystery
+        {
+          case_title: "Murder on the Midnight Express",
+          case_overview: "A wealthy passenger is found dead in his private compartment on a cross-country luxury train.",
+          difficulty: "Hard",
+          suspects: [
+            {
+              name: "Train Conductor Murphy",
+              gender: "male",
+              age: 47,
+              clothing: "Classic conductor uniform with gold trim",
+              personality: "Authoritative and rule-following",
+              background: "20 years experience, knows every passenger",
+              alibi: "Checking tickets in dining car",
+              is_murderer: false,
+              chat: []
+            },
+            {
+              name: "Wealthy Passenger Rothschild",
+              gender: "male",
+              age: 62,
+              clothing: "Expensive silk pajamas",
+              personality: "Arrogant and demanding",
+              background: "Billionaire with many enemies",
+              alibi: "Sleeping in adjacent compartment",
+              is_murderer: false,
+              chat: []
+            },
+            {
+              name: "Dining Car Chef Bernard",
+              gender: "male",
+              age: 39,
+              clothing: "White chef's uniform",
+              personality: "Passionate but stressed",
+              background: "Former sous chef seeking head position",
+              alibi: "Preparing midnight snacks",
+              is_murderer: true,
+              chat: []
+            },
+            {
+              name: "Mysterious Passenger Blackwood",
+              gender: "female",
+              age: 34,
+              clothing: "Dark traveling cloak and gloves",
+              personality: "Enigmatic and secretive",
+              background: "Claims to be a writer researching train travel",
+              alibi: "Reading in observation car",
+              is_murderer: false,
+              chat: []
+            }
+          ],
+          witnesses: [
+            {
+              name: "Car Attendant Gomez",
+              description: "28, responsible for compartment service, was nearby",
+              observation: "Smelled something unusual near the victim's compartment",
+              note: "Couldn't place the scent but it wasn't food or perfume",
+              chat: []
+            }
+          ],
+          embedding: null
+        }
+      ];
       
-      finalParsed = fallbackCase;
-      console.log("✅ Fallback case generated successfully");
+      // Select a random fallback case
+      const fallbackCase = fallbackCases[Math.floor(Math.random() * fallbackCases.length)]
+      
+      finalParsed = fallbackCase
+      console.log("✅ Fallback case generated successfully")
     }
     
-    const userId = currentUsername || null;
-    finalParsed.suspects = finalParsed.suspects.map((s) => ({ ...s, chat: [] }));
-    finalParsed.witnesses = finalParsed.witnesses?.map((w) => ({ ...w, chat: [] })) || [];
+    const userId = currentUsername || null
+    // Ensure all suspects and witnesses have chat arrays
+    if (finalParsed.suspects) {
+      finalParsed.suspects = finalParsed.suspects.map((s) => ({ ...s, chat: s.chat || [] }))
+    }
+    if (finalParsed.witnesses) {
+      finalParsed.witnesses = finalParsed.witnesses.map((w) => ({ ...w, chat: w.chat || [] }))
+    }
     
     try {
-      console.log("💾 Storing case in Firestore...");
+      console.log("💾 Storing case in Supabase...")
       
-      const ownerId = auth.currentUser
-        ? `firebase:${auth.currentUser.uid}`
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const ownerId = authUser
+        ? `supabase:${authUser.id}`
         : address
         ? `wallet:${address.toLowerCase()}`
-        : null;
+        : null
 
-      console.log("👤 Owner ID:", ownerId);
+      console.log("👤 Owner ID:", ownerId)
 
-      const docId = await storeCaseInFirestore(finalParsed, userId);
+      const docId = await storeCaseInSupabase(finalParsed, userId)
       
       if (!docId) {
-        console.error("❌ No document ID returned from storeCaseInFirestore");
-        throw new Error("Failed to store case - no document ID");
+        console.error("❌ No document ID returned from storeCaseInSupabase")
+        throw new Error("Failed to store case - no document ID")
       }
       
-      finalParsed.id = docId;
-      console.log("✅ Case stored with ID:", docId);
+      finalParsed.id = docId
+      console.log("✅ Case stored with ID:", docId)
       
       // Only store embeddings if they were generated successfully
       if (summary && newEmbedding) {
-        console.log("💾 Storing embeddings...");
-        await storeOverviewEmbedding(docId, summary, newEmbedding);
-        await storeEmbeddingsForCase(finalParsed, docId);
-        console.log("✅ Embeddings stored successfully");
+        console.log("💾 Storing embeddings...")
+        await storeOverviewEmbedding(docId, summary, newEmbedding)
+        await storeEmbeddingsForCase(finalParsed, docId)
+        console.log("✅ Embeddings stored successfully")
       } else {
-        console.warn("⚠️ Skipping embedding storage due to generation failure");
+        console.warn("⚠️ Skipping embedding storage due to generation failure")
       }
     } catch (error) {
-      console.error("❌ Error storing case:", error);
+      console.error("❌ Error storing case:", error)
       console.error("Error details:", {
         message: error.message,
         stack: error.stack,
         caseTitle: finalParsed.case_title
-      });
+      })
     }
 
-    setCaseData(finalParsed);
-    setStartTime(Date.now());
-    setTotalTimeTaken(0);
-    setIsTimerPaused(false);
-    setLoading(false);
+    setCaseData(finalParsed)
+    setStartTime(Date.now())
+    setTotalTimeTaken(0)
+    setIsTimerPaused(false)
+    setLoading(false)
     
-    console.log("🎉 Case generation completed successfully!");
+    console.log("🎉 Case generation completed successfully!")
     console.log("📋 Final case data:", {
       id: finalParsed.id,
       title: finalParsed.case_title,
       suspects: finalParsed.suspects.length,
       witnesses: finalParsed.witnesses.length
-    });
-  };
-
-  const generateSimpleCase = () => {
-    console.log("🧪 Generating test case...");
-    callGemini(); 
-  };
+    })
+  }
 
   const sendMessageToCharacter = async () => {
-    if (!currentInput.trim()) {
-      console.warn("⚠️ Empty message, skipping send");
-      return;
+    if (!_currentInput.trim()) {
+      console.warn("⚠️ Empty message, skipping send")
+      return
     }
     
-    console.log("💬 Sending message to character:", currentInput);
+    console.log("💬 Sending message to character:", _currentInput)
     
-    const updated = { ...caseData };
-    const key = viewing === "suspect" ? "suspects" : "witnesses";
-    const character = updated[key][selectedIndex];
+    const updated = { ...caseData }
+    const key = _viewing === "suspect" ? "suspects" : "witnesses"
+    const character = updated[key][_selectedIndex]
     
-    character.chat.push({ role: "user", content: currentInput });
-    setCaseData(updated);
-    setChatLoading(true);
+    character.chat.push({ role: "user", content: _currentInput })
+    setCaseData(updated)
+    _setChatLoading(true)
 
-    const dialog = character.chat.map(msg => 
+    // Cap chat history to last 10 messages to avoid token limits
+    const recentChat = character.chat.slice(-10)
+    const dialog = recentChat.map(msg => 
       msg.role === "user" 
         ? `Investigator: ${msg.content}` 
-        : `${character.name}: ${msg.content}`
-    ).join("\n");
+        : `${character.name}: ${msg.content}${msg.hint ? ` (Hint: ${msg.hint})` : ''}`
+    ).join("\n")
     
-    console.log("🔍 Getting relevant context...");
-    let context = await getRelevantContext(caseData.id, currentInput);
-    console.log("📚 Context retrieved:", context ? context.substring(0, 100) + "..." : "None");
+    console.log("🔍 Getting relevant context...")
+    let context = await getRelevantContext(caseData.id, _currentInput)
+    console.log("📚 Context retrieved:", context ? context.substring(0, 100) + "..." : "None")
     
-    const finalPrompt = `${viewing === "suspect" ? `You are ${character.name}, a suspect.` : `You are ${character.name}, a witness.`} Context: ${context || "None"}. Chat: ${dialog}. Respond as ${character.name}, concise (max 35 words). If murderer, lie convincingly. Include 1 generic detective question hint separated by @.`;
+    const finalPrompt = `${_viewing === "suspect" ? `You are ${character.name}, a suspect.` : `You are ${character.name}, a witness.`} Context: ${context || "None"}. Chat: ${dialog}. Respond as ${character.name}, concise (max 35 words). If murderer, lie convincingly. Include 1 generic detective question hint separated by @.`
 
     try {
-      console.log("🤖 Calling Gemini for character response...");
+      console.log("🤖 Calling Gemini for character response...")
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -544,68 +847,66 @@ const GameStart = () => {
             contents: [{ parts: [{ text: finalPrompt }] }],
           }),
         }
-      );
+      )
       
-      const data = await res.json();
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const data = await res.json()
+      
+      // Harden Gemini response parsing
+      if (!data.candidates || data.candidates.length === 0) {
+        console.error("❌ No candidates in Gemini response", data)
+        return
+      }
+      
+      // Check for safety ratings
+      const candidate = data.candidates[0]
+      if (candidate.safetyRatings && candidate.safetyRatings.some(rating => rating.probability === "HIGH" || rating.probability === "MEDIUM")) {
+        console.warn("⚠️ Safety concerns in Gemini response", candidate.safetyRatings)
+      }
+      
+      const reply = candidate.content?.parts?.[0]?.text
       
       if (reply) {
-        console.log("✅ Character response received:", reply.substring(0, 100) + "...");
-        character.chat.push({ role: "model", parts: reply.split("@") });
-        setCaseData({ ...updated });
+        console.log("✅ Character response received:", reply.substring(0, 100) + "...")
+        const [response, hint] = reply.split("@").map(s => s.trim())
+        character.chat.push({ role: "model", content: response, hint: hint || null })
+        setCaseData({ ...updated })
         
         if (caseData.id) {
-          console.log("💾 Updating chat in Firestore...");
+          console.log("💾 Updating chat in Supabase...")
           await updateCaseChat(caseData.id, { 
             suspects: updated.suspects, 
             witnesses: updated.witnesses 
-          });
-          console.log("✅ Chat updated in Firestore");
+          })
+          console.log("✅ Chat updated in Supabase")
         }
       } else {
-        console.error("❌ No reply from character AI");
+        console.error("❌ No reply from character AI")
       }
     } catch (e) { 
-      console.error("❌ Error in character chat:", e);
+      console.error("❌ Error in character chat:", e)
     }
     
-    setCurrentInput(""); 
-    setChatLoading(false);
-  };
+    _setCurrentInput("") 
+    _setChatLoading(false)
+  }
   
+  const generateSimpleCase = () => {
+    console.log("🧪 Generating test case...")
+    callGemini() 
+  }
+
   const handleResetGame = () => {
-    console.log("🔄 Resetting game...");
-    setCaseData(null);
-    setSelectedIndex(null);
-    setShowModal(false);
-    callGemini(); 
-  };
+    console.log("🔄 Resetting game...")
+    setCaseData(null)
+    _setSelectedIndex(null)
+    _setShowModal(false)
+    callGemini() 
+  }
 
   // --- RENDER ---
   return (
     <div className="min-h-screen bg-black text-slate-200 font-mono relative overflow-x-hidden">
-        {/* add once near the top of the returned JSX */}
-<style jsx>{`
-  /* Reusable custom scrollbar to match Archives panel */
-  .custom-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(168, 85, 247, 0.3) transparent;
-  }
 
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(168, 85, 247, 0.3);
-    border-radius: 3px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(168, 85, 247, 0.5);
-  }
-`}</style>
 
         {/* Background */}
         <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none z-0"></div>
@@ -669,28 +970,13 @@ const GameStart = () => {
                 scrollbarColor: 'rgba(168, 85, 247, 0.3) transparent'
             }}
         >
-            <style jsx>{`
-                div::-webkit-scrollbar {
-                    width: 6px;
-                }
-                div::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                div::-webkit-scrollbar-thumb {
-                    background: rgba(168, 85, 247, 0.3);
-                    border-radius: 3px;
-                }
-                div::-webkit-scrollbar-thumb:hover {
-                    background: rgba(168, 85, 247, 0.5);
-                }
-            `}</style>
+
             <UserStats />
         </div>
     </div>
 </div>
 
                         
-
 
                         {/* Leaderboard - Right */}
                         <div className="lg:col-span-1 order-3 h-80">
@@ -773,9 +1059,9 @@ const GameStart = () => {
                                     <Accusation 
                                         caseData={caseData} 
                                         onResetGame={handleResetGame} 
-                                        onSuccessfulSolve={(totalTime) => {
-                                            const time = isTimerPaused ? totalTimeTaken : totalTimeTaken + Math.floor((Date.now() - startTime) / 1000);
-                                            handleSuccessfulSolve(time);
+                                        onSuccessfulSolve={() => {
+                                            const time = isTimerPaused ? totalTimeTaken : totalTimeTaken + Math.floor((Date.now() - startTime) / 1000)
+                                            handleSuccessfulSolve(time)
                                         }} 
                                     />
                                 </div>
@@ -796,7 +1082,7 @@ const GameStart = () => {
                                     {caseData.suspects.map((suspect, idx) => (
                                         <button
                                             key={idx}
-                                            onClick={() => { setSelectedIndex(idx); setViewing("suspect"); setShowModal(true); }}
+                                            onClick={() => { _setSelectedIndex(idx); _setViewing("suspect"); _setShowModal(true) }}
                                             className="group relative bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-purple-500 rounded-xl p-4 transition-all text-left flex items-center gap-4 shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1"
                                         >
                                             <div className="w-16 h-16 rounded-full bg-slate-200 overflow-hidden flex-shrink-0 border-2 border-slate-600 group-hover:border-purple-400 shadow-inner">
@@ -829,7 +1115,7 @@ const GameStart = () => {
                                     {caseData.witnesses.map((witness, idx) => (
                                         <button
                                             key={idx}
-                                            onClick={() => { setSelectedIndex(idx); setViewing("witness"); setShowModal(true); }}
+                                            onClick={() => { _setSelectedIndex(idx); _setViewing("witness"); _setShowModal(true) }}
                                             className="group relative bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-blue-500 rounded-xl p-4 transition-all text-left flex items-center gap-4 shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1"
                                         >
                                             <div className="w-16 h-16 rounded-full bg-slate-200 overflow-hidden flex-shrink-0 border-2 border-slate-600 group-hover:border-blue-400 shadow-inner">
@@ -854,105 +1140,117 @@ const GameStart = () => {
                     </div>
                 </div>
             )}
-
-            {/* --- MODAL (Chat) --- */}
-            {showModal && selectedIndex !== null && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
-                    <button 
-                        onClick={() => setShowModal(false)}
-                        className="absolute top-4 right-4 z-[110] p-2 bg-slate-800/80 hover:bg-red-600/90 text-slate-300 hover:text-white rounded-full border border-slate-700 hover:border-red-500/50 transition-all shadow-xl"
-                    >
-                        <X className="w-6 h-6" />
-                    </button>
-
-                    {(() => {
-                        const isSuspect = viewing === "suspect";
-                        const character = caseData[isSuspect ? "suspects" : "witnesses"][selectedIndex];
-                        const accent = isSuspect ? "purple" : "blue";
-                        
-                        return (
-                            <div className={`bg-slate-950 w-full max-w-5xl h-[85vh] rounded-2xl border border-${accent}-500/30 shadow-2xl flex flex-col md:flex-row overflow-hidden relative`}>
-                                <div className="md:w-72 bg-slate-900/50 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col h-full flex-shrink-0">
-                                    <div className="p-6 border-b border-slate-800/50 bg-slate-900/80">
-                                        <div className={`w-24 h-24 rounded-full border-4 border-${accent}-500/20 overflow-hidden mb-4 mx-auto shadow-lg bg-slate-200`}>
-                                            <img src={getGenderBasedAvatar(character.name.replace(/\s+/g, ''), character.gender)} alt="" className="w-full h-full object-cover" />
-                                        </div>
-                                        <h2 className="text-xl font-bold text-white text-center mb-1 leading-none">{character.name}</h2>
-                                        <div className="flex justify-center mt-2">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-widest bg-${accent}-500/10 text-${accent}-400 border border-${accent}-500/20`}>
-                                                {isSuspect ? "Primary Suspect" : "Key Witness"}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-
-                                        {Object.entries(character).filter(([k]) => !["chat", "name", "is_murderer", "embedding"].includes(k)).map(([k, v]) => (
-                                            <div key={k} className="group">
-                                                <span className="block text-slate-500 uppercase font-bold text-[10px] tracking-wider mb-1 group-hover:text-${accent}-400 transition-colors">{k}</span>
-                                                <span className="text-sm text-slate-300 leading-snug block">{v}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="p-4 border-t border-slate-800 bg-slate-900/80">
-                                        <button onClick={() => setShowModal(false)} className="w-full py-3 bg-slate-800 hover:bg-red-900/20 border border-slate-700 hover:border-red-500/30 rounded-lg text-xs text-slate-400 hover:text-red-400 uppercase font-bold transition-all flex items-center justify-center gap-2">
-                                            <X className="w-4 h-4" /> Close File
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="flex-1 flex flex-col bg-black/20 relative min-w-0">
-                                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-
-                                        {character.chat.length === 0 && (
-                                            <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-50">
-                                                <MessageSquare className="w-12 h-12 mb-2" />
-                                                <span className="text-sm font-mono uppercase tracking-widest">Secure Line Connected</span>
-                                            </div>
-                                        )}
-                                        {character.chat.map((msg, i) => (
-                                            <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                                                <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm relative ${
-                                                    msg.role === "user" ? `bg-${accent}-600 text-white rounded-br-none` : "bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none"
-                                                }`}>
-                                                    {msg.role === "model" && msg.parts ? (
-                                                        <><div>{msg.parts[0]}</div>{msg.parts[1] && <div className="mt-3 pt-2 border-t border-white/10 flex gap-2 items-start"><Lightbulb className="w-3 h-3 text-yellow-500 flex-shrink-0 mt-0.5" /><span className="text-xs text-yellow-500/90 italic">{msg.parts[1]}</span></div>}</>
-                                                    ) : msg.content}
-                                                </div>
-                                                <span className="text-[10px] text-slate-600 mt-2 px-1 uppercase font-bold tracking-wider">{msg.role === "user" ? "You" : character.name}</span>
-                                            </div>
-                                        ))}
-                                        <div ref={chatEndRef} />
-                                    </div>
-                                    <div className="p-4 bg-slate-900 border-t border-slate-800">
-                                        <div className="flex gap-2 relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Terminal className="h-4 w-4 text-slate-500" /></div>
-                                            <input type="text" value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessageToCharacter()} placeholder="Enter interrogation question..." className="flex-1 bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-sm text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all placeholder-slate-600 font-mono" disabled={chatLoading} autoFocus />
-                                            <button onClick={sendMessageToCharacter} disabled={chatLoading || !currentInput.trim()} className={`px-4 py-2 bg-${accent}-600 hover:bg-${accent}-500 disabled:opacity-50 disabled:bg-slate-800 rounded-lg text-white transition-all shadow-lg hover:shadow-${accent}-500/20`}>{chatLoading ? <Cpu className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })()}
-                </div>
-            )}
-
-            {/* Quit Modal */}
-            {confirmQuitModal && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-red-500/30 p-6 rounded-xl w-full max-w-sm text-center shadow-2xl">
-                        <ShieldAlert className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                        <h2 className="text-xl font-bold text-white mb-2">Abort Investigation?</h2>
-                        <p className="text-slate-400 text-sm mb-6">Current case progress will be permanently lost.</p>
-                        <div className="flex gap-3">
-                            <button onClick={() => { setConfirmQuitModal(false); handleGameEnd(false); }} className="flex-1 py-3 bg-red-600 hover:bg-red-500 rounded-lg text-white text-xs font-bold uppercase tracking-wider shadow-lg hover:shadow-red-600/20">Confirm</button>
-                            <button onClick={() => setConfirmQuitModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-white text-xs font-bold uppercase tracking-wider border border-slate-700">Cancel</button>
-                        </div>
+            {/* Character Chat Modal */}
+            {_showModal && (
+              <div className="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                <div className="bg-slate-900 border border-purple-500/30 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border-2 border-purple-500">
+                        <img 
+                          src={getGenderBasedAvatar(
+                            (_viewing === "suspect" 
+                              ? caseData.suspects[_selectedIndex] 
+                              : caseData.witnesses[_selectedIndex]
+                            ).name.replace(/\s+/g, ''),
+                          )} 
+                          alt="" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-white">
+                          {_viewing === "suspect" 
+                            ? caseData.suspects[_selectedIndex].name 
+                            : caseData.witnesses[_selectedIndex].name}
+                        </h3>
+                        <p className="text-xs text-slate-400 capitalize">
+                          {_viewing} #{_selectedIndex + 1}
+                        </p>
+                      </div>
                     </div>
+                    <button 
+                      onClick={() => _setShowModal(false)}
+                      className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5 text-slate-400" />
+                    </button>
+                  </div>
+                  
+                  {/* Chat Messages */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                    {(_viewing === "suspect" 
+                      ? caseData.suspects[_selectedIndex] 
+                      : caseData.witnesses[_selectedIndex]
+                    ).chat.map((msg, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                      >
+                        <div 
+                          className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                            msg.role === "user" 
+                              ? "bg-purple-600 text-white rounded-br-none" 
+                              : "bg-slate-800 text-slate-200 rounded-bl-none"
+                          }`}
+                        >
+                          {msg.role === "user" ? (
+                            <p>{msg.content}</p>
+                          ) : (
+                            <div>
+                              <p>{msg.content}</p>
+                              {msg.hint && (
+                                <p className="text-xs mt-2 text-purple-300 italic">💡 {msg.hint}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {_chatLoading && (
+                      <div className="flex justify-start">
+                        <div className="bg-slate-800 text-slate-200 rounded-2xl rounded-bl-none px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse delay-75"></div>
+                            <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse delay-150"></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div ref={_chatEndRef} />
+                  </div>
+                  
+                  {/* Message Input */}
+                  <div className="p-4 border-t border-slate-700">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={_currentInput}
+                        onChange={(e) => _setCurrentInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && sendMessageToCharacter()}
+                        placeholder="Ask a question..."
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={_chatLoading}
+                      />
+                      <button
+                        onClick={sendMessageToCharacter}
+                        disabled={_chatLoading || !_currentInput.trim()}
+                        className="bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-xl px-4 py-3 transition-colors flex items-center justify-center"
+                      >
+                        <Send className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              </div>
             )}
         </div>
-    </div>
-  );
-};
-
-export default GameStart;
+      </div>
+    )
+  }
+  
+  export default GameStart

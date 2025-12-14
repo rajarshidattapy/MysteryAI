@@ -1,5 +1,5 @@
-import { supabase } from '../src/Supabase/supabaseClient'
-import { cosineSimilarity } from "../RAG/cosineUtils"
+import { supabase } from './supabaseClient'
+import { cosineSimilarity } from "./../RAG/cosineUtils"
 
 export const isCaseTooSimilar = async (embedding, threshold = 0.9) => {
   try {
@@ -12,8 +12,8 @@ export const isCaseTooSimilar = async (embedding, threshold = 0.9) => {
       return false
     }
     
-    for (const doc of data) {
-      const existing = doc
+    for (const item of data) {
+      const existing = item
       const similarity = cosineSimilarity(existing.embedding, embedding)
       if (similarity > threshold) {
         console.log("⚠️ Similar case found. Similarity:", similarity)

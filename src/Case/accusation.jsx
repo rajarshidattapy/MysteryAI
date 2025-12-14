@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { updateCaseWithGuess } from "./../../Firebase/storeCase";
+import { updateCaseWithGuess } from "./../../src/Supabase/cases";
 import { Gavel, Fingerprint, AlertTriangle, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 
 const Accusation = ({ caseData, onResetGame, onSuccessfulSolve }) => {
@@ -50,7 +50,7 @@ const Accusation = ({ caseData, onResetGame, onSuccessfulSolve }) => {
   if (showResult) {
     return (
       <div className={`relative overflow-hidden rounded-lg p-6 text-center border transition-all duration-500 ${
-        isCorrect 
+      isCorrect 
           ? "bg-green-900/20 border-green-500/50 shadow-[0_0_30px_-10px_rgba(34,197,94,0.3)]" 
           : "bg-red-900/20 border-red-500/50 shadow-[0_0_30px_-10px_rgba(239,68,68,0.3)]"
       }`}>

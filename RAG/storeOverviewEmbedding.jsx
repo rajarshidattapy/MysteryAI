@@ -1,17 +1,26 @@
-// /src/Firebase/storeOverviewEmbedding.js
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "./../Firebase/casesDb"; // adjust if your Firebase config file is elsewhere
+// /src/Supabase/storeOverviewEmbedding.js
+import { supabase } from '../src/Supabase/supabaseClient'
 
 export const storeOverviewEmbedding = async (caseId, summary, embedding) => {
   try {
-    const docRef = await addDoc(collection(db, "case_overview_embeddings"), {
-      caseId,
-      summary,
-      embedding,
-      createdAt: serverTimestamp(),
-    });
-    console.log("📌 Overview embedding stored:", docRef.id);
+    const { error } = await supabase
+      .from('case_overview_embeddings')
+      .insert([
+        {
+          case_id: caseId,
+          summary: summary,
+          embedding: embedding,
+          created_at: new Date()
+        }
+      ])
+    
+    if (error) {
+      console.error("Failed to store overview embedding:", error)
+      return
+    }
+    
+    console.log("Overview embedding stored")
   } catch (err) {
-    console.error("❌ Failed to store overview embedding:", err);
+    console.error("Failed to store overview embedding:", err)
   }
-};
+}

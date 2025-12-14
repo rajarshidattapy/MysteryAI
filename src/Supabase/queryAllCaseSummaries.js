@@ -1,4 +1,4 @@
-import { supabase } from '../src/Supabase/supabaseClient'
+import { supabase } from './supabaseClient'
 
 export const queryAllCaseSummaries = async () => {
   try {
@@ -11,7 +11,7 @@ export const queryAllCaseSummaries = async () => {
       return []
     }
     
-    return data.map(doc => ({ ...doc, id: doc.id }))
+    return data.map(item => ({ ...item, id: item.id }))
   } catch (error) {
     console.error("Error querying case summaries:", error)
     return []

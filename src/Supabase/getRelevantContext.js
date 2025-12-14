@@ -1,7 +1,6 @@
-// rag/queryRelevantEmbeddings.js
-import { supabase } from '../src/Supabase/supabaseClient'
-import { cosineSimilarity } from "./cosineUtils"
-import { getEmbeddingFromHF } from "./generateEmbeddingHF"
+import { supabase } from './supabaseClient'
+import { cosineSimilarity } from "./../RAG/cosineUtils"
+import { getEmbeddingFromHF } from "./../RAG/generateEmbeddingHF"
 
 export const getRelevantContext = async (caseId, input) => {
   const inputEmbedding = await getEmbeddingFromHF(input)
@@ -21,12 +20,11 @@ export const getRelevantContext = async (caseId, input) => {
     let bestMatch = null
     let bestScore = -1
 
-    data.forEach(doc => {
-      const data = doc
-      const score = cosineSimilarity(data.embedding, inputEmbedding)
+    data.forEach(item => {
+      const score = cosineSimilarity(item.embedding, inputEmbedding)
       if (score > bestScore) {
         bestScore = score
-        bestMatch = data.text
+        bestMatch = item.text
       }
     })
 

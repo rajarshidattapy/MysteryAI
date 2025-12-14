@@ -1,6 +1,6 @@
-import { supabase } from '../src/Supabase/supabaseClient'
-import { getEmbeddingFromHF } from "./generateEmbeddingHF"
-import { cosineSimilarity } from "./cosineUtils"
+import { supabase } from './supabaseClient'
+import { getEmbeddingFromHF } from "./../RAG/generateEmbeddingHF"
+import { cosineSimilarity } from "./../RAG/cosineUtils"
 
 export const queryRelevantEmbeddings = async (userQuestion, caseId, topK = 3) => {
   const questionEmbedding = await getEmbeddingFromHF(userQuestion)
@@ -19,13 +19,12 @@ export const queryRelevantEmbeddings = async (userQuestion, caseId, topK = 3) =>
 
     const scoredChunks = []
 
-    data.forEach(doc => {
-      const data = doc
-      if (!data.embedding || !Array.isArray(data.embedding)) return
+    data.forEach(item => {
+      if (!item.embedding || !Array.isArray(item.embedding)) return
 
-      const score = cosineSimilarity(data.embedding, questionEmbedding)
+      const score = cosineSimilarity(questionEmbedding, item.embedding)
       scoredChunks.push({
-        ...data,
+        ...item,
         similarity: score
       })
     })

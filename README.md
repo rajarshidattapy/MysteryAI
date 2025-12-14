@@ -21,7 +21,7 @@
 - **Interactive Interrogation**: Chat with AI-powered suspects and witnesses who respond based on their personalities and roles
 - **RAG-Enhanced Conversations**: Retrieval-Augmented Generation ensures contextually relevant responses using HuggingFace embeddings
 - **Blockchain Verification**: Game completions are recorded on Monad blockchain with cryptographic proof
-- **Dual Authentication**: Sign in with Firebase Auth or connect your Web3 wallet (MetaMask)
+- **Dual Authentication**: Sign in with Supabase Auth or connect your Web3 wallet (MetaMask)
 - **Smart Deduplication**: Cosine similarity checks prevent repetitive case generation
 - **Leaderboard System**: Track your stats and compete with other players
 - **Timed Challenges**: Race against the clock to solve mysteries
@@ -29,8 +29,8 @@
 ## Tech Stack
 
 **Frontend**: React 19, Vite, TailwindCSS, React Router  
-**Authentication**: Firebase Auth + Web3 (Wagmi, Viem, Ethers.js)  
-**Database**: Firebase Firestore  
+**Authentication**: Supabase Auth + Web3 (Wagmi, Viem, Ethers.js)  
+**Database**: Supabase Database  
 **AI/ML**: Google Gemini 1.5 Flash, HuggingFace (sentence-transformers/all-MiniLM-L6-v2)  
 **Blockchain**: Monad (Mainnet & Testnet), Smart Contract integration  
 **State Management**: React Context API
@@ -41,7 +41,7 @@
 - **Embedding Storage**: Case summaries are vectorized and stored to prevent duplicates
 - **RAG Pipeline**: User questions are embedded and matched against case context for relevant AI responses
 - **On-Chain Proof**: Solved cases are recorded on Monad blockchain with wallet signatures
-- **Stats Tracking**: Firebase stores game history, solve times, and win rates
+- **Stats Tracking**: Supabase stores game history, solve times, and win rates
 
 ## Setup
 
@@ -59,12 +59,12 @@ npm run dev
 
 ## Configuration
 
-Add your API keys to Firebase Firestore:
-- Collection: `Apis`
-- Document: `0`
-- Fields: `huggingfaceApi`, Google Gemini API key in code
+Add your API keys to Supabase Database:
+- Table: `apis`
+- Row: `0`
+- Columns: `huggingface_api`, Google Gemini API key in code
 
-Update Firebase config in `Firebase/userAuth.jsx` and `Firebase/casesDb.jsx`
+Update Supabase config in `src/Supabase/userAuth.js` and `src/Supabase/supabaseClient.js`
 
 ## Smart Contract
 

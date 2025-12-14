@@ -1,89 +1,89 @@
 // src/Auth/Auth.jsx
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, AlertCircle, ArrowRight, Loader2, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Mail, Lock, User, AlertCircle, ArrowRight, Loader2, Shield } from 'lucide-react'
 import {
   registerUser,
   loginUser,
   onAuthStateChange,
   auth,
   logoutUser
-} from '../../Firebase/userAuth';
+} from '../../src/Supabase/userAuth'
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const [isLogin, setIsLogin] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
-  // Check if user is already logged in (Firebase auth)
+  // Check if user is already logged in (auth)
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
       if (user) {
-        navigate('/gameStart');
+        navigate('/gameStart')
       }
-    });
+    })
 
     // Cleanup subscription
-    return () => unsubscribe();
-  }, [navigate]);
+    return () => unsubscribe()
+  }, [navigate])
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+    e.preventDefault()
+    setError('')
+    setLoading(true)
 
     if (!email.trim() || !password.trim()) {
-      setError('Missing credentials. Please fill all fields.');
-      setLoading(false);
-      return;
+      setError('Missing credentials. Please fill all fields.')
+      setLoading(false)
+      return
     }
 
     if (isLogin) {
       // Login logic
-      const { user, error } = await loginUser(email, password);
+      const { user, error } = await loginUser(email, password)
 
       if (error) {
-        setError(error);
-        setLoading(false);
-        return;
+        setError(error)
+        setLoading(false)
+        return
       }
     } else {
       // Register logic
       if (password !== confirmPassword) {
-        setError('Password mismatch detected.');
-        setLoading(false);
-        return;
+        setError('Password mismatch detected.')
+        setLoading(false)
+        return
       }
 
       if (!username.trim()) {
-        setError('Agent alias (username) is required.');
-        setLoading(false);
-        return;
+        setError('Agent alias (username) is required.')
+        setLoading(false)
+        return
       }
 
-      const { user, error } = await registerUser(email, password, username);
+      const { user, error } = await registerUser(email, password, username)
 
       if (error) {
-        setError(error);
-        setLoading(false);
-        return;
+        setError(error)
+        setLoading(false)
+        return
       }
     }
 
-    setLoading(false);
-  };
+    setLoading(false)
+  }
 
   const toggleAuthMode = () => {
-    setIsLogin(!isLogin);
-    setError('');
+    setIsLogin(!isLogin)
+    setError('')
     // Optional: clear fields on toggle
     // setEmail(''); setPassword('');
-  };
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-black font-mono relative overflow-hidden">
@@ -247,22 +247,22 @@ const Auth = () => {
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default Auth;
+export default Auth
 
 // AuthUtils - Helper functions
 export const isAuthenticated = () => {
-  return !!auth.currentUser;
-};
+  return !!auth.user()
+}
 
 export const logout = async (navigate) => {
-  await logoutUser();
-  navigate('/');
-};
+  await logoutUser()
+  navigate('/')
+}
 
 export const getUsername = () => {
-  const user = auth.currentUser;
-  return user ? user.displayName : '';
-};
+  const user = auth.user()
+  return user && user.user_metadata ? user.user_metadata.username : ''
+}
