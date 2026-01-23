@@ -1,4 +1,3 @@
-// wagmi.config.js
 import { http, createConfig } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 
@@ -32,7 +31,8 @@ export const monadTestnet = {
 }
 
 export const config = createConfig({
-  // ✅ Only Monad mainnet + testnet
+  autoConnect: true,   // ⭐ REQUIRED
+
   chains: [monad, monadTestnet],
 
   connectors: [
@@ -41,20 +41,8 @@ export const config = createConfig({
     }),
   ],
 
-  // ✅ Use each chain's own RPC URL
   transports: {
     [monad.id]: http(monad.rpcUrls.default.http[0]),
     [monadTestnet.id]: http(monadTestnet.rpcUrls.default.http[0]),
   },
 })
-
-
-// export function useMonadNetwork() {
-//   const chainId = useChainId()
-
-//   return {
-//     chainId,
-//     isMonadMainnet: chainId === monad.id,
-//     isMonadTestnet: chainId === monadTestnet.id,
-//   }
-// }

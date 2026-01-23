@@ -40,7 +40,7 @@ const GameStart = () => {
   const [startTime, setStartTime] = useState(Date.now())
   const [totalTimeTaken, setTotalTimeTaken] = useState(0)
   const [isTimerPaused, setIsTimerPaused] = useState(false)
-  const [, setConfirmQuitModal] = useState(false)
+  const [confirmQuitModal, setConfirmQuitModal] = useState(false)
   const [currentUsername, setCurrentUsername] = useState("")
 
   const {address, isConnected} = useAccount()
@@ -64,27 +64,41 @@ const GameStart = () => {
 
   // --- Auth & Wallet Logic ---
   const createWalletProof = async (won, timeTaken, caseId) => {
-    if (!isConnected || !walletClient || !address) {
-      console.log("⏭️ No wallet connected for proof generation")
-      return null
-    }
-    
-    const message = `MysteryAI proof
+
+  if (!window.ethereum || !isConnected || !address) {
+    console.log("⏭️ No wallet available for signing")
+    return null
+  }
+
+  const message = `MysteryAI proof
 caseId: ${caseId}
 solved: ${won}
 timeTaken: ${timeTaken}
 chainId: ${chainId}`
-    
-    try {
-      console.log("🔐 Signing wallet proof...", { address, chainId, caseId })
-      const signature = await walletClient.signMessage({ account: address, message })
-      console.log("✅ Wallet proof signed successfully")
-      return { walletAddress: address, chainId, message, signature }
-    } catch (err) {
-      console.error('❌ Error signing wallet proof:', err)
-      return null
+
+  try {
+    console.log("🔐 Requesting wallet signature...")
+
+    const provider = new ethers.BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+
+    const signature = await signer.signMessage(message)
+
+    console.log("✅ Wallet proof signed")
+
+    return {
+      walletAddress: address,
+      chainId,
+      message,
+      signature
     }
+
+  } catch (err) {
+    console.error("❌ Wallet signing failed:", err)
+    return null
   }
+}
+
 
   const sendOnChainProof = async (result, timeTaken) => {
     try {
@@ -132,13 +146,15 @@ chainId: ${chainId}`
   }, [])
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChange((user) => {
-      _setSupabaseUser(user)
-      setAuthChecked(true)
-      console.log("🔐 Auth state changed:", user ? `User: ${user.id}` : "No user")
-    })
-    return () => unsubscribe()
-  }, [])
+  const { data: { subscription } } = onAuthStateChange((user) => {
+    _setSupabaseUser(user)
+    setAuthChecked(true)
+    console.log("Auth state changed:", user ? `User: ${user.id}` : "No user")
+  })
+
+  return () => subscription.unsubscribe()
+}, [])
+
 
   useEffect(() => {
     if (!authChecked) return 
@@ -147,6 +163,15 @@ chainId: ${chainId}`
       window.location.href = '/auth'
     }
   }, [authChecked, _supabaseUser, isConnected])
+//remove this
+  useEffect(() => {
+  console.log("WAGMI STATE:", {
+    isConnected,
+    address,
+    walletClient
+  })
+}, [isConnected, address, walletClient])
+
 
   const saveGameStats = async (result, timeTaken, proof) => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -180,6 +205,7 @@ chainId: ${chainId}`
       
       if (gameError) {
         console.error("❌ Error saving game to user_games:", gameError)
+        return
       }
 
       // Update user stats
@@ -239,6 +265,7 @@ chainId: ${chainId}`
   // --- Game Control Logic ---
   const handleQuit = () => {
     console.log("⚠️ Quit requested")
+    console.log( typeof setConfirmQuitModal)
     setConfirmQuitModal(true)
   }
   
@@ -742,7 +769,16 @@ chainId: ${chainId}`
       console.log("✅ Fallback case generated successfully")
     }
     
-    const userId = currentUsername || null
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+
+if (!authUser) {
+  console.error("❌ No authenticated Supabase user found")
+  setLoading(false)
+  return
+}
+
+const userId = authUser.id
+
     // Ensure all suspects and witnesses have chat arrays
     if (finalParsed.suspects) {
       finalParsed.suspects = finalParsed.suspects.map((s) => ({ ...s, chat: s.chat || [] }))
@@ -755,13 +791,7 @@ chainId: ${chainId}`
       console.log("💾 Storing case in Supabase...")
       
       const { data: { user: authUser } } = await supabase.auth.getUser()
-      const ownerId = authUser
-        ? `supabase:${authUser.id}`
-        : address
-        ? `wallet:${address.toLowerCase()}`
-        : null
-
-      console.log("👤 Owner ID:", ownerId)
+      
 
       const docId = await storeCaseInSupabase(finalParsed, userId)
       
@@ -997,30 +1027,69 @@ chainId: ${chainId}`
                 <div className="animate-in fade-in zoom-in-95 duration-500 flex flex-col gap-6">
                     
                     {/* HUD BAR */}
-                    <div className="sticky top-20 z-200 bg-slate-900/90 backdrop-blur-md border border-purple-500/30 rounded-xl p-4 md:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl mb-12">
-                        <div className="flex items-center gap-6 flex-wrap">
-                            <div className="flex items-center gap-4 px-5 py-3 bg-black/40 rounded-lg border border-purple-500/20">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                                    <span className="text-xs font-bold text-red-400 tracking-widest uppercase">Live</span>
-                                </div>
-                                <div className="w-px h-5 bg-slate-700"></div>
-                                <div className="min-w-[120px]">
-                                    <Timer onTimerEnd={handleTimerEnd} onTimePause={handleTimePause} onTimeResume={handleTimeResume} />
-                                </div>
-                            </div>
-                            <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 font-mono">
-                                <Terminal className="w-4 h-4" />
-                                <span>CASE_ID: <span className="text-purple-400">{caseData.id?.slice(0,8).toUpperCase()}</span></span>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={handleQuit}
-                            className="px-5 py-3 bg-red-950/30 hover:bg-red-900/50 text-red-200 text-xs font-bold uppercase tracking-wide rounded-lg border border-red-500/20 hover:border-red-500 transition-all flex items-center gap-2 whitespace-nowrap"
-                        >
-                            <X className="w-4 h-4" /> Abort Mission
-                        </button>
-                    </div>
+                    <div className="sticky top-20 z-[200] bg-slate-900/90 backdrop-blur-md border border-purple-500/30 rounded-xl p-4 md:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl mb-12">
+
+  {/* LEFT HUD INFO */}
+  <div className="flex items-center gap-6 flex-wrap">
+
+    {/* LIVE + TIMER */}
+    <div className="flex items-center gap-4 px-5 py-3 bg-black/40 rounded-lg border border-purple-500/20">
+
+      <div className="flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+        <span className="text-xs font-bold text-red-400 tracking-widest uppercase">
+          Live
+        </span>
+      </div>
+
+      <div className="w-px h-5 bg-slate-700"></div>
+
+      <div className="min-w-[120px]">
+        <Timer 
+          onTimerEnd={handleTimerEnd} 
+          onTimePause={handleTimePause} 
+          onTimeResume={handleTimeResume} 
+        />
+      </div>
+    </div>
+
+    {/* CASE ID */}
+    <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 font-mono">
+      <Terminal className="w-4 h-4" />
+      <span>
+        CASE_ID: 
+        <span className="text-purple-400 ml-1">
+          {caseData.id?.slice(0, 8).toUpperCase()}
+        </span>
+      </span>
+    </div>
+
+  </div>
+
+  {/* RIGHT ABORT CONTROL */}
+  <div className="flex items-center gap-3">
+
+    {/* Danger label */}
+    <span className="hidden sm:block text-[10px] uppercase tracking-widest text-red-400 opacity-70">
+      Emergency Control
+    </span>
+
+    {/* Abort Button */}
+    <button 
+      onClick={handleQuit}
+      className="group px-5 py-3 bg-red-950/40 hover:bg-red-900/60 text-red-200 text-xs font-bold uppercase tracking-wide rounded-lg 
+      border border-red-500/30 hover:border-red-400 transition-all 
+      flex items-center gap-2 whitespace-nowrap shadow-lg 
+      hover:shadow-red-500/20 active:scale-95"
+    >
+      <X className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
+      Abort Mission
+    </button>
+
+  </div>
+
+</div>
+
 
                     {/* DASHBOARD GRID */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1249,6 +1318,55 @@ chainId: ${chainId}`
               </div>
             )}
         </div>
+        {/* QUIT CONFIRM MODAL */}
+{confirmQuitModal && (
+  <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
+
+    <div className="bg-slate-900 border border-red-500/40 rounded-xl p-6 w-[320px] text-center shadow-2xl">
+
+      <h3 className="text-white font-bold mb-3">
+        Abort Mission?
+      </h3>
+
+      <p className="text-slate-400 text-sm mb-5">
+        Current investigation progress will be lost.
+      </p>
+
+      <div className="flex justify-center gap-4">
+
+        <button
+          onClick={() => {
+            console.log("Mission aborted")
+
+            setConfirmQuitModal(false)
+
+            setCaseData(null)
+            _setSelectedIndex(null)
+            _setShowModal(false)
+
+            setIsTimerPaused(false)
+            setTotalTimeTaken(0)
+            setStartTime(Date.now())
+          }}
+          className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg text-white font-bold"
+        >
+          Abort
+        </button>
+
+        <button
+          onClick={() => setConfirmQuitModal(false)}
+          className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-white"
+        >
+          Cancel
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
+
       </div>
     )
   }

@@ -22,15 +22,17 @@ const Auth = () => {
 
   // Check if user is already logged in (auth)
   useEffect(() => {
-    const unsubscribe = onAuthStateChange((user) => {
-      if (user) {
-        navigate('/gameStart')
-      }
-    })
+  const { data } = onAuthStateChange((user) => {
+    if (user) {
+      navigate('/gameStart')
+    }
+  })
 
-    // Cleanup subscription
-    return () => unsubscribe()
-  }, [navigate])
+  return () => {
+    data?.subscription?.unsubscribe()
+  }
+}, [navigate])
+
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -52,6 +54,8 @@ const Auth = () => {
         setLoading(false)
         return
       }
+
+      navigate('/connect-wallet')
     } else {
       // Register logic
       if (password !== confirmPassword) {
@@ -73,6 +77,9 @@ const Auth = () => {
         setLoading(false)
         return
       }
+      if (!error) {
+        navigate('/connect-wallet')
+    }
     }
 
     setLoading(false)

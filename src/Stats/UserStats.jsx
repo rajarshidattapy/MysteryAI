@@ -13,71 +13,77 @@ const UserStats = () => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const currentUser = auth.user()
-        if (!currentUser) return
+  let currentUserId = null
 
-        // Fetch user stats from Supabase
-        const { data, error } = await supabase
-          .from('user_stats')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .single()
-        
-        if (error) {
-          console.error("Error fetching user stats:", error)
-          // Initialize with default values if no stats exist
-          setStats({
-            gamesPlayed: 0,
-            wins: 0,
-            totalSolveTime: 0
-          })
-          return
-        }
-        
-        if (data) {
-          setStats({
-            gamesPlayed: data.games_played || 0,
-            wins: data.wins || 0,
-            totalSolveTime: data.total_solve_time || 0
-          })
-        }
-      } catch (err) {
-        console.error("Error in fetchStats:", err)
-      } finally {
+  const fetchStats = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
         setLoading(false)
+        return
       }
-    }
 
-    fetchStats()
-    
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('user_stats_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'user_stats'
-        },
-        (payload) => {
-          if (payload.new.user_id === auth.user()?.id) {
-            setStats({
-              gamesPlayed: payload.new.games_played || 0,
-              wins: payload.new.wins || 0,
-              totalSolveTime: payload.new.total_solve_time || 0
-            })
-          }
+      currentUserId = user.id
+
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+
+      if (error) {
+        console.warn("No stats found, using defaults")
+        setStats({
+          gamesPlayed: 0,
+          wins: 0,
+          totalSolveTime: 0
+        })
+        return
+      }
+
+      setStats({
+        gamesPlayed: data.games_played || 0,
+        wins: data.wins || 0,
+        totalSolveTime: data.total_solve_time || 0
+      })
+
+    } catch (err) {
+      console.error("Error in fetchStats:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  fetchStats()
+
+  // REALTIME listener
+  const channel = supabase
+    .channel('user_stats_changes')
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'user_stats'
+      },
+      (payload) => {
+        if (payload.new.user_id === currentUserId) {
+          setStats({
+            gamesPlayed: payload.new.games_played || 0,
+            wins: payload.new.wins || 0,
+            totalSolveTime: payload.new.total_solve_time || 0
+          })
         }
-      )
-      .subscribe()
+      }
+    )
+    .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [])
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [])
+
 
   const winRate = stats.gamesPlayed > 0 
     ? Math.round((stats.wins / stats.gamesPlayed) * 100) 

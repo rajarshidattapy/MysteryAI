@@ -1,106 +1,160 @@
-import React from 'react';
-import { Shield, ArrowRight } from 'lucide-react'; // Added ArrowRight
-import { useNavigate } from 'react-router-dom';
-import { WalletConnect } from './WalletConnect';
-import { useAccount } from 'wagmi';
+import React, { useEffect, useState } from 'react'
+import { Shield, Wallet, Loader2, LogOut, CheckCircle2, ChevronRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useAccount, useConnect, useDisconnect } from 'wagmi'
+import { supabase } from '../Supabase/supabaseClient' // adjust path if needed
 
 const ConnectWalletPage = () => {
-  const navigate = useNavigate();
-  const { isConnected } = useAccount();
+  const navigate = useNavigate()
 
-  // Auto-redirect after wallet connect
-  React.useEffect(() => {
-    if (isConnected) {
-      navigate('/gameStart');
+  const { address, isConnected } = useAccount()
+  const { connect, connectors, status, error } = useConnect()
+  const { disconnect } = useDisconnect()
+
+  const [saving, setSaving] = useState(false)
+
+  // ==============================
+  // SAVE WALLET AFTER CONNECT
+  // ==============================
+
+  useEffect(() => {
+    if (!isConnected || !address) return
+
+    const saveWallet = async () => {
+      try {
+        setSaving(true)
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+
+        if (!user) {
+          console.error('❌ No Supabase user session found')
+          return
+        }
+
+        console.log('👤 Supabase User ID:', user.id)
+        console.log('🔗 Wallet Address:', address)
+
+        // Upsert wallet into user_stats
+        const { error } = await supabase
+          .from('user_stats')
+          .upsert({
+            user_id: user.id,
+            wallet_address: address,
+          })
+
+        if (error) {
+          console.error('❌ Failed saving wallet:', error)
+          return
+        }
+
+        console.log('✅ Wallet linked successfully')
+
+        navigate('/gameStart')
+      } catch (err) {
+        console.error('❌ Wallet save error:', err)
+      } finally {
+        setSaving(false)
+      }
     }
-  }, [isConnected, navigate]);
+
+    saveWallet()
+  }, [isConnected, address, navigate])
+
+  // ==============================
+  // UI
+  // ==============================
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-black font-mono overflow-hidden selection:bg-purple-500/30">
-      
-      {/* --- CSS for Custom Animations --- */}
-      <style>{`
-        @keyframes float {
-          0% { transform: translate(0px, 0px) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-          100% { transform: translate(0px, 0px) scale(1); }
-        }
-        @keyframes pulse-glow {
-          0%, 100% { box-shadow: 0 0 15px 0px rgba(168, 85, 247, 0.3); }
-          50% { box-shadow: 0 0 30px 5px rgba(168, 85, 247, 0.6); }
-        }
-        .animate-blob { animation: float 10s infinite ease-in-out; }
-        .animate-blob-delay { animation: float 12s infinite ease-in-out reverse; }
-        .glow-icon { animation: pulse-glow 3s infinite; }
-      `}</style>
+    <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-black font-mono">
 
-      {/* --- Dynamic Background Layer --- */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        {/* Noise Texture */}
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-150 mix-blend-overlay" />
-        
-        {/* Cyber Grid */}
-        <div 
-          className="absolute inset-0 opacity-[0.15]" 
-          style={{ 
-            backgroundImage: 'linear-gradient(#4c1d95 1px, transparent 1px), linear-gradient(90deg, #4c1d95 1px, transparent 1px)', 
-            backgroundSize: '40px 40px' 
-          }} 
-        />
-        
-        {/* Animated Orbs */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 blur-[120px] rounded-full animate-blob mix-blend-screen" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-600/20 blur-[120px] rounded-full animate-blob-delay mix-blend-screen" />
-      </div>
+      <div className="w-full max-w-md bg-gray-950/80 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-8 shadow-xl">
 
-      {/* --- Main Content Card --- */}
-      <div className="w-full max-w-md relative z-10 group">
-        
-        {/* Card Border Gradient Glow */}
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
-        
-        {/* Glass Card Container */}
-        <div className="relative bg-gray-950/80 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-8 ring-1 ring-white/5">
-          
-          <div className="text-center mb-8">
-            {/* Icon Container */}
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-900/50 to-black border border-purple-500/30 mb-6 glow-icon transform transition-transform hover:scale-105 duration-300">
-              <Shield className="w-8 h-8 text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.5)]" />
-            </div>
-            
-            <h2 className="text-2xl text-white font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
-              Agent Authentication
-            </h2>
-            <p className="text-slate-400 text-sm mt-3 leading-relaxed">
-              Connect your Web3 wallet to access the<br/>restricted neural interface.
-            </p>
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-purple-900/40 border border-purple-500/30 mb-4">
+            <Shield className="w-7 h-7 text-purple-400" />
           </div>
 
-          {/* Wallet UI (Imported Component) */}
-          <div className="transform transition-all duration-300 hover:translate-y-[-2px]">
-            <WalletConnect />
-          </div>
+          <h2 className="text-xl text-white font-bold">
+            Connect Wallet
+          </h2>
 
-          {/* Divider */}
-          <div className="relative flex py-6 items-center">
-            <div className="flex-grow border-t border-white/10"></div>
-            <span className="flex-shrink-0 mx-4 text-[10px] text-slate-500 uppercase tracking-[0.2em]">Or Access Via</span>
-            <div className="flex-grow border-t border-white/10"></div>
-          </div>
-
-          {/* Secondary Action - IMPROVED STYLE */}
-          <button
-            onClick={() => navigate('/auth')}
-            className="group w-full py-3.5 px-4 rounded-xl flex items-center justify-center gap-3 text-sm font-medium text-slate-400 hover:text-white border border-white/5 hover:border-white/20 hover:bg-white/5 transition-all duration-300 active:scale-[0.98]"
-          >
-            <span>Use Communication Link & Access Code</span>
-            <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 text-purple-400" />
-          </button>
+          <p className="text-slate-400 text-sm mt-2">
+            Link your Web3 identity to your account
+          </p>
         </div>
+
+        {/* CONNECTED STATE */}
+        {isConnected ? (
+          <div className="p-4 rounded-xl bg-emerald-900/20 border border-emerald-500/30">
+
+            <div className="flex items-center gap-3 mb-3">
+              <CheckCircle2 className="text-emerald-400 w-5 h-5" />
+
+              <span className="text-xs text-emerald-400 font-bold uppercase">
+                Wallet Connected
+              </span>
+            </div>
+
+            <p className="text-sm text-slate-300 font-mono truncate mb-4">
+              {address}
+            </p>
+
+            {saving && (
+              <div className="flex items-center gap-2 text-purple-400 text-sm mb-3">
+                <Loader2 className="animate-spin w-4 h-4" />
+                Saving wallet...
+              </div>
+            )}
+
+            <button
+              onClick={() => disconnect()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-900/20 hover:bg-red-900/30 border border-red-500/30 rounded-lg text-red-300 text-sm"
+            >
+              <LogOut className="w-4 h-4" />
+              Disconnect Wallet
+            </button>
+          </div>
+        ) : (
+
+          // DISCONNECTED STATE
+          <div className="space-y-3">
+
+            {connectors.map((connector) => (
+              <button
+                key={connector.id ?? connector.uid}
+                onClick={() => connect({ connector })}
+                disabled={status === 'pending'}
+                className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <Wallet className="w-5 h-5 text-purple-400" />
+                  <span className="text-white text-sm">
+                    {connector.name}
+                  </span>
+                </div>
+
+                {status === 'pending' ? (
+                  <Loader2 className="animate-spin w-4 h-4 text-purple-400" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+            ))}
+
+            {error && (
+              <div className="mt-3 p-3 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
+                {error.message}
+              </div>
+            )}
+
+          </div>
+        )}
+
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default ConnectWalletPage;
+export default ConnectWalletPage
