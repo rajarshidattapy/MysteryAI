@@ -1,0 +1,45 @@
+# Render.com deployment configuration for DeadDrop
+
+services:
+  - type: web
+    name: deaddrop-frontend
+    env: docker
+    region: oregon # or any region you prefer
+    plan: free # or starter/standard
+
+    # Build configuration
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    # Environment variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Add your environment variables here
+      # These will be available during build time
+      - key: VITE_GEMINI_API_KEY
+        sync: false # Set to true if using Render's secret management
+
+      - key: VITE_DEAD_DROP_REGISTRY_ADDRESS
+        sync: false
+
+      - key: VITE_DEAD_DROP_NFT_ADDRESS
+        sync: false
+
+      # Optional: Supabase (only if using RAG features)
+      # - key: VITE_SUPABASE_URL
+      #   sync: false
+      #
+      # - key: VITE_SUPABASE_ANON_KEY
+      #   sync: false
+
+    # Health check
+    healthCheckPath: /health
+
+    # Auto-deploy on push
+    autoDeploy: true
+
+    # Branch to deploy from
+    branch: main # or master, depending on your repo
+
