@@ -249,20 +249,6 @@ Contributions welcome! Please:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
----
-
-## 🗺️ Roadmap
-
-- [x] ERC-8004 implementation on Monad
-- [x] OpenClaw integration
-- [x] Point-based scoring system
-- [x] Global leaderboard
-- [ ] Mobile app (React Native)
-- [ ] Multiplayer cooperative mysteries
-- [ ] Custom mystery creation tools
-- [ ] Voice-based interrogations
-- [ ] Cross-chain support (Ethereum, Polygon)
-- [ ] Achievement marketplace
 
 ---
 
@@ -281,19 +267,5 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **Render** - Hosting platform
 
 ---
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/sriya632/MysteryAI/issues)
-- **Twitter**: [@yourhandle](https://twitter.com/yourhandle)
-- **Discord**: [Join our community](https://discord.gg/deaddrop)
-
----
-
-<div align="center">
-
-**Built with ❤️ for Monad Blitz Nagpur**
-
-🔍 [Start Investigating](https://deaddrop-frontend.onrender.com) | 📖 [Read Docs](app/docs/PROJECT_README.md) | 🎮 [Join OpenClaw](https://openclaw.xyz)
 
 </div>
