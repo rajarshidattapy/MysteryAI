@@ -29,24 +29,44 @@ const UserStats = () => {
       try {
         setLoading(true)
 
-        // Fetch MysterySolved events filtered by the connected wallet
-        const logs = await publicClient.getLogs({
-          address: DEAD_DROP_REGISTRY_ADDRESS,
-          event: {
-            type: 'event',
-            name: 'MysterySolved',
-            inputs: [
-              { indexed: true, name: 'mysteryId', type: 'uint256' },
-              { indexed: true, name: 'solver', type: 'address' },
-              { indexed: false, name: 'solveTime', type: 'uint256' }
-            ]
-          },
-          args: {
-            solver: address // Filter by connected wallet
-          },
-          fromBlock: 0n,
-          toBlock: 'latest'
-        })
+        // Get the latest block number
+        const latestBlock = await publicClient.getBlockNumber()
+
+        // Monad limits eth_getLogs to 100 block range, so we need to chunk
+        const CHUNK_SIZE = 100n
+        const allLogs = []
+
+        // Fetch logs in chunks
+        for (let fromBlock = 0n; fromBlock <= latestBlock; fromBlock += CHUNK_SIZE) {
+          const toBlock = fromBlock + CHUNK_SIZE - 1n > latestBlock
+            ? latestBlock
+            : fromBlock + CHUNK_SIZE - 1n
+
+          try {
+            const logs = await publicClient.getLogs({
+              address: DEAD_DROP_REGISTRY_ADDRESS,
+              event: {
+                type: 'event',
+                name: 'MysterySolved',
+                inputs: [
+                  { indexed: true, name: 'mysteryId', type: 'uint256' },
+                  { indexed: true, name: 'solver', type: 'address' },
+                  { indexed: false, name: 'solveTime', type: 'uint256' }
+                ]
+              },
+              args: {
+                solver: address // Filter by connected wallet
+              },
+              fromBlock,
+              toBlock
+            })
+            allLogs.push(...logs)
+          } catch (chunkError) {
+            console.warn(`Failed to fetch logs for blocks ${fromBlock}-${toBlock}:`, chunkError)
+          }
+        }
+
+        const logs = allLogs
 
         // Compute stats from events
         const gamesPlayed = logs.length

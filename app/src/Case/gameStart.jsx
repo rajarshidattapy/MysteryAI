@@ -12,7 +12,7 @@ import { storeOverviewEmbedding } from "../../RAG/storeOverviewEmbedding"
 import WalletLeaderboard from "../Stats/WalletLeaderboard.jsx"
 import { useAccount, useChainId } from "wagmi"
 import { getRandomDifficulty, getDifficultyLabel, getDifficultyColors } from "../utils/difficulty"
-
+import InvestigationModal from "../components/InvestigationModal"
 // 🎨 Icons
 import { 
   Play, MessageSquare, FileText, Users, 
@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "YOUR_GEMINI_API_KEY"
+
 
 const GameStart = () => {
   const [loading, setLoading] = useState(false)
@@ -31,7 +32,7 @@ const GameStart = () => {
   const [_currentInput, _setCurrentInput] = useState("")
   const [_chatLoading, _setChatLoading] = useState(false)
   const _chatEndRef = useRef(null) 
-  
+  const[showInvestigationModal, setShowInvestigationModal] = useState(false)
   const { caseData, setCaseData } = useCase()
   const [startTime, setStartTime] = useState(Date.now())
   const [totalTimeTaken, setTotalTimeTaken] = useState(0)
@@ -115,7 +116,8 @@ const GameStart = () => {
     return `${caseData.case_title}. ${caseData.case_overview}`.replace(/\n/g, " ").replace(/"/g, "'").replace(/\\+/g, " ").slice(0, 512)
   }
 
-  const callGemini = async () => {
+  const _callGeminiInternal = async () => {
+
     setLoading(true)
     setError(null)
     let attempts = 0
@@ -647,6 +649,10 @@ const GameStart = () => {
     })
   }
 
+  const callGemini = async () => {
+    setShowInvestigationModal(true)
+  }
+
   const sendMessageToCharacter = async () => {
     if (!_currentInput.trim()) {
       console.warn("⚠️ Empty message, skipping send")
@@ -1173,9 +1179,21 @@ const GameStart = () => {
       </div>
 
     </div>
+    
+
 
   </div>
 )}
+{showInvestigationModal && (
+  <InvestigationModal
+    onClose={() => setShowInvestigationModal(false)}
+    onGameStart={() => {
+      setShowInvestigationModal(false)
+      _callGeminiInternal() // original logic runs here
+    }}
+  />
+)}
+
 
       </div>
     )
